@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  r1: 
+    build: ./
+    networks:
+      N_C1:
+        ipv4_address: 10.10.0.100
+
+
+
+networks:
+  N_C1:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.0.0/24
