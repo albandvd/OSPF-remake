@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  r1: 
+    build: ./
+    command: tail -f /dev/null
+    networks:
+      N_C1:
+        ipv4_address: 10.1.0.10
+    volumes:
+      - ./src:/opt/ospf
+  r2: 
+    build: ./
+    command: tail -f /dev/null
+    networks:
+      N_C1:
+        ipv4_address: 10.1.0.20
+      N_C2:
+        ipv4_address: 10.2.0.20
+    volumes:
+      - ./src:/opt/ospf
+  r3:
+    build: ./
+    command: tail -f /dev/null
+    networks:
+      N_C3:
+        ipv4_address: 10.3.0.30
+    volumes:
+      - ./src:/opt/ospf
+  
+  r4:
+    build: ./
+    command: tail -f /dev/null
+    networks:
+      N_C1:
+        ipv4_address: 10.1.0.40
+      N_C2:
+        ipv4_address: 10.2.0.40
+    volumes:
+      - ./src:/opt/ospf
+
+  r5:
+    build: ./
+    command: tail -f /dev/null
+    networks:
+      N_C2:
+        ipv4_address: 10.2.0.50
+      N_C3:
+        ipv4_address: 10.3.0.50
+    volumes:
+      - ./src:/opt/ospf
+
+networks:
+  N_C1:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.1.0.0/24
+
+  N_C2:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.2.0.0/24
+
+  N_C3:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.3.0.0/24
