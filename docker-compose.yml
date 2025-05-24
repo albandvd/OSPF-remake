@@ -7,8 +7,7 @@ services:
     networks:
       N_C1:
         ipv4_address: 10.1.0.10
-    volumes:
-      - ./src:/opt/ospf
+
   r2: 
     build: ./
     command: tail -f /dev/null
@@ -17,16 +16,14 @@ services:
         ipv4_address: 10.1.0.20
       N_C2:
         ipv4_address: 10.2.0.20
-    volumes:
-      - ./src:/opt/ospf
+
   r3:
     build: ./
     command: tail -f /dev/null
     networks:
       N_C3:
         ipv4_address: 10.3.0.30
-    volumes:
-      - ./src:/opt/ospf
+
   
   r4:
     build: ./
@@ -36,8 +33,7 @@ services:
         ipv4_address: 10.1.0.40
       N_C2:
         ipv4_address: 10.2.0.40
-    volumes:
-      - ./src:/opt/ospf
+
 
   r5:
     build: ./
@@ -47,8 +43,7 @@ services:
         ipv4_address: 10.2.0.50
       N_C3:
         ipv4_address: 10.3.0.50
-    volumes:
-      - ./src:/opt/ospf
+
 
 networks:
   N_C1:

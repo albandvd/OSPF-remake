@@ -1,5 +1,3 @@
-#!/usr/bin/bash
+#!/bin/sh
 
-ls
-
-tail -f /dev/null
+/opt/ospf/ospf
