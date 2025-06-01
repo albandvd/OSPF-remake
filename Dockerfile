@@ -5,10 +5,10 @@ RUN apk update && \
 
 COPY entrypoint.sh /opt
 COPY src /opt/ospf
+RUN ls -l /opt/ospf
 RUN chmod +x /opt/entrypoint.sh
 
 WORKDIR /opt/ospf
 RUN make
-RUN ls -l /opt
 
-RUN /opt/entrypoint.sh
+#RUN /opt/entrypoint.sh
