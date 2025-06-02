@@ -16,7 +16,9 @@ Assurez vous d'avoir mis à jour le Makefile pour que les modifications soient b
 Pour lancer un contnaire Alpine pour pouvoir réaliser des test de dev lancer la commande suivante:
 
 ``` sh
-cd dev | docker build -t dev-ospf | docker run --name dev -rm -it dev-ospf
+cd dev
+docker build -t dev-ospf ./
+docker run --name dev --rm -it dev-ospf
 ```
 
 Assurez vous d'avoir mis à jour le Makefile pour que les modifications soient bien prise en compte 

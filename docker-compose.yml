@@ -3,6 +3,8 @@ version: '3.8'
 services:
   r1: 
     build: ./
+    container_name: r1
+    hostname: r1
     command: tail -f /dev/null
     networks:
       N_C1:
@@ -10,6 +12,8 @@ services:
 
   r2: 
     build: ./
+    container_name: r2
+    hostname: r2
     command: tail -f /dev/null
     networks:
       N_C1:
@@ -19,6 +23,8 @@ services:
 
   r3:
     build: ./
+    container_name: r3
+    hostname: r3
     command: tail -f /dev/null
     networks:
       N_C3:
@@ -27,6 +33,8 @@ services:
   
   r4:
     build: ./
+    container_name: r4
+    hostname: r4
     command: tail -f /dev/null
     networks:
       N_C1:
@@ -37,6 +45,8 @@ services:
 
   r5:
     build: ./
+    container_name: r5
+    hostname: r5
     command: tail -f /dev/null
     networks:
       N_C2:
