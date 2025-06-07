@@ -1,11 +1,12 @@
 #include <stdio.h>
+#include "LSDB.h"
 
-int checkservice() {
+ServiceState checkservice() {
     FILE *file;
     if (file = fopen("test.bin", "rb")){
         fclose(file);
-        return 0;
+        return SERVICE_LAUNCHED;
+    } else {
+        return SERVICE_NOT_LAUNCHED;
     }
-
-    return 1;
 }

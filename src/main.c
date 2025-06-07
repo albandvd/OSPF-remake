@@ -12,10 +12,10 @@ int main() {
     LSA lsa1 = {"R1", 1, interface1};
     LSA lsa2 = {"R2", 2, interface2};
 
-    LSDB lsdb = {2, {lsa1, lsa2}};
+    LSDB lsdb = {2, 2, {lsa1, lsa2}};
 
     printf("*********************************\n");
-    // Serialisation ///////////////////////////////////
+    // Creation LSDB ///////////////////////////////////
 
     FILE *f = fopen("test.bin", "wb");
     if (!f) {

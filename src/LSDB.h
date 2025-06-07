@@ -1,4 +1,5 @@
 #define IFNAMSIZ 16
+#define MAX_LSAS 10 // Tableau de 10 LSDA nb nécessaire pour les tests
 
 struct Interface{
     char nameInterface[IFNAMSIZ];
@@ -19,6 +20,18 @@ typedef struct LSA LSA;
 
 struct LSDB{
     int numRouter;
-    LSA lsda[10]; // Tableau de 10 LSDA nb nécessaire pour les tests
+    int countLSA;
+    LSA lsda[MAX_LSAS];
 };
 typedef struct LSDB LSDB;
+
+typedef enum {
+    LSDB_SUCCESS,
+    LSDB_ERROR_FILE_NOT_FOUND,
+    LSDB_ERROR_READ_FAILURE
+} LSDBreturn;
+
+typedef enum {
+    SERVICE_NOT_LAUNCHED,
+    SERVICE_LAUNCHED
+} ServiceState; 
