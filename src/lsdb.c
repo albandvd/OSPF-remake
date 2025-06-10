@@ -1,6 +1,6 @@
 #include "LSDB.h"
 #include <stdio.h>
-#include <check-service.c>
+#include "check-service.h"
 
 LSDBreturn retrieve_lsdb(LSDB *lsdb) {
     ServiceState state = checkservice(); 
@@ -9,14 +9,14 @@ LSDBreturn retrieve_lsdb(LSDB *lsdb) {
         case SERVICE_NOT_LAUNCHED:
             printf("Service not launched");
             return LSDB_ERROR_FILE_NOT_FOUND;
-        case SERVICE_LAUNCHED:
+        case SERVICE_LAUNCHED: {
             FILE *f = fopen("test.bin", "rb");
             if (!f) {
                 perror("Error opening file");
                 return LSDB_ERROR_FILE_NOT_FOUND;
             }
             
-            size_t read_size = fread(&lsdb, sizeof(LSDB), 1, f);
+            size_t read_size = fread(lsdb, sizeof(LSDB), 1, f);
             if (read_size != 1) {
                 perror("Error reading file");
                 fclose(f);
@@ -25,7 +25,10 @@ LSDBreturn retrieve_lsdb(LSDB *lsdb) {
             fclose(f);
             printf("Number of routers: %d\n", lsdb->numRouter);
             return LSDB_SUCCESS;       
+        }
     }
+    
+    return LSDB_ERROR;
 }
 
 LSDBreturn save_lsdb(LSDB *lsdb) {
@@ -36,7 +39,7 @@ LSDBreturn save_lsdb(LSDB *lsdb) {
             printf("Service not launched");
             return LSDB_ERROR_FILE_NOT_FOUND;
 
-        case SERVICE_LAUNCHED:
+        case SERVICE_LAUNCHED: {
             FILE *f = fopen("test.bin", "wb");
             if (!f) {
                 perror("Error opening file");
@@ -46,7 +49,10 @@ LSDBreturn save_lsdb(LSDB *lsdb) {
             fwrite(&lsdb, sizeof(LSDB), 1, f);
             fclose(f);
             return LSDB_SUCCESS;
+        }
     }
+
+    return LSDB_ERROR;
 }
 
 int add_lsa (LSA *lsa, LSDB *lsdb) {
@@ -60,7 +66,4 @@ int add_lsa (LSA *lsa, LSDB *lsdb) {
 
     save_lsdb(lsdb);
     return 0;
-}
-
-int remove_lsa (){
 }

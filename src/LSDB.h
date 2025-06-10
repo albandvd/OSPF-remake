@@ -1,3 +1,6 @@
+#ifndef LSDB_H
+#define LSDB_H
+
 #define IFNAMSIZ 16
 #define MAX_LSAS 10 // Tableau de 10 LSDA nb nécessaire pour les tests
 
@@ -28,10 +31,8 @@ typedef struct LSDB LSDB;
 typedef enum {
     LSDB_SUCCESS,
     LSDB_ERROR_FILE_NOT_FOUND,
-    LSDB_ERROR_READ_FAILURE
+    LSDB_ERROR_READ_FAILURE,
+    LSDB_ERROR
 } LSDBreturn;
 
-typedef enum {
-    SERVICE_NOT_LAUNCHED,
-    SERVICE_LAUNCHED
-} ServiceState; 
+#endif
