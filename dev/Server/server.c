@@ -1,59 +1,92 @@
-// serveur_voisin.c
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <netdb.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include "hello.h"
 
-#define PORT "4242"
-#define BUF_SIZE 100
+#define PORT 4242
+
+void handle_client(int client_sock)
+{
+    HelloMessage hello;
+    ssize_t r = recv(client_sock, &hello, sizeof(hello), 0);
+    if (r <= 0)
+    {
+        perror("recv hello");
+        return;
+    }
+
+    hello.type = ntohl(hello.type);
+    hello.router_id = ntohl(hello.router_id);
+
+    printf("Reçu HELLO de routeur %d (%s)\n", hello.router_id, hello.router_name);
+
+    // Envoi de l'ACK
+    HelloAckMessage ack;
+    ack.type = htonl(MSG_TYPE_HELLO_ACK);
+    ack.router_id = htonl(99); // notre ID (ex: 99)
+    ack.status = htonl(0);     // 0 = OK
+
+    send(client_sock, &ack, sizeof(ack), 0);
+}
 
 int main()
 {
-    struct addrinfo hints, *res;
-    int sockfd, newfd;
-    struct sockaddr_storage client_addr;
-    socklen_t addr_size;
-    char buffer[BUF_SIZE];
-    int n;
+    int sockfd, client_sock;
+    struct sockaddr_in serv_addr, cli_addr;
+    socklen_t cli_len = sizeof(cli_addr);
 
-    // Identification du service
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET; // IPv4
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE; // Pour bind
-
-    getaddrinfo(NULL, PORT, &hints, &res);
-
-    // Création du socket avec les paramètres de l'identification
-    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-
-    // Binding du socket
-    bind(sockfd, res->ai_addr, res->ai_addrlen);
-
-    // Mise en écoute du socket
-    listen(sockfd, 10);
-
-    printf("Serveur en attente sur le port %s...\n", PORT);
-
-    while (1)
+    // Création de la socket
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
     {
-        addr_size = sizeof client_addr;
-        newfd = accept(sockfd, (struct sockaddr *)&client_addr, &addr_size);
-
-        n = recv(newfd, buffer, BUF_SIZE - 1, 0);
-        if (n > 0)
-        {
-            buffer[n] = '\0';
-            printf("Reçu de voisin : %s\n", buffer);
-        }
-
-        close(newfd);
+        perror("socket");
+        exit(EXIT_FAILURE);
     }
 
-    freeaddrinfo(res);
+    // Configuration de l'adresse du serveur
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = INADDR_ANY;
+    serv_addr.sin_port = htons(PORT);
+
+    // Bind
+    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+    {
+        perror("bind");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+
+    // Listen
+    if (listen(sockfd, 5) < 0)
+    {
+        perror("listen");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Serveur en attente de connexions...\n");
+
+    // Boucle infinie pour accepter et traiter chaque client
+    while (1)
+    {
+        client_sock = accept(sockfd, (struct sockaddr *)&cli_addr, &cli_len);
+        if (client_sock < 0)
+        {
+            perror("accept");
+            continue; // continue au lieu de stop
+        }
+
+        printf("Connexion acceptée depuis %s:%d\n",
+               inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
+
+        handle_client(client_sock);
+        close(client_sock); // Fermer la connexion avec ce client
+    }
+
+    // (jamais atteint ici, mais bon à avoir)
     close(sockfd);
     return 0;
 }
