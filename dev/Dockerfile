@@ -6,7 +6,7 @@ RUN apk update && \
     apk add openrc
 
 
-COPY ./ /opt
+COPY . /opt
 
 WORKDIR /opt
 RUN make
