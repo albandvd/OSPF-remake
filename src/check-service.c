@@ -1,13 +1,14 @@
 #include <stdio.h>
-#include "check-service.h"
-#include "LSDB.h"
+#include "return.h"
 
-ServiceState checkservice() {
-    FILE *file;
-    if ((file = fopen("test.bin", "rb"))) {
-        fclose(file);
-        return SERVICE_LAUNCHED;
-    } else {
-        return SERVICE_NOT_LAUNCHED;
+ReturnCode checkservice() {
+    FILE *file = fopen("test.bin", "rb");
+
+    if (!file) {
+        fprintf(stderr, "[checkservice] %s\n", return_code_to_string(FILE_OPEN_ERROR));
+        return FILE_OPEN_ERROR;
     }
+
+    fclose(file);
+    return RETURN_SUCCESS;
 }

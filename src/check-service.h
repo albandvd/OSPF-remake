@@ -1,12 +1,8 @@
-// check-service.h
 #ifndef CHECK_SERVICE_H
 #define CHECK_SERVICE_H
 
-typedef enum {
-    SERVICE_NOT_LAUNCHED,
-    SERVICE_LAUNCHED
-} ServiceState;
+#include "return.h"
 
-ServiceState checkservice(void);
+ReturnCode checkservice(void);
 
 #endif
