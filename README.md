@@ -5,7 +5,6 @@
 Pour tester l'infrastructure lancer la commande suivante à la racine du projet: 
 
 ``` sh 
-docker-compose build
 docker-compose up -d
 ```
 
