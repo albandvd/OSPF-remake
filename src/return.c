@@ -16,6 +16,8 @@ const char* return_code_to_string(ReturnCode code) {
         case LSDB_ERROR_INTERFACE_NOT_FOUND: return "LSDB: Interface not found";
         case LSDB_ERROR_SERVICE_NOT_AVAILABLE: return "LSDB: Service not available";
         case LSDB_ERROR_NULL_ARGUMENT: return "LSDB: Null argument";
+        case LSDB_ERROR_FULL_LSA: return "LSDB: Full LSA";
+        case LSDB_ERROR_LSA_NOT_FOUND: return "LSDB: LSA not found, please check the name of the router and interface";
 
         // Interface
         case INTERFACE_NOT_FOUND: return "Interface not found";

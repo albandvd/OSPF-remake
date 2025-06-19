@@ -1,69 +1,137 @@
-#include "LSDB.h"
-#include <stdio.h>
+#include "lsdb.h"
+#include "return.h"
 #include "check-service.h"
+#include <stdio.h>
+#include <stdlib.h>
 
-LSDBreturn retrieve_lsdb(LSDB *lsdb) {
-    ServiceState state = checkservice(); 
-
-    switch (state) {
-        case SERVICE_NOT_LAUNCHED:
-            printf("Service not launched");
-            return LSDB_ERROR_FILE_NOT_FOUND;
-        case SERVICE_LAUNCHED: {
-            FILE *f = fopen("test.bin", "rb");
-            if (!f) {
-                perror("Error opening file");
-                return LSDB_ERROR_FILE_NOT_FOUND;
-            }
-            
-            size_t read_size = fread(lsdb, sizeof(LSDB), 1, f);
-            if (read_size != 1) {
-                perror("Error reading file");
-                fclose(f);
-                return LSDB_ERROR_READ_FAILURE;
-            }
-            fclose(f);
-            printf("Number of routers: %d\n", lsdb->numRouter);
-            return LSDB_SUCCESS;       
-        }
-    }
-    
-    return LSDB_ERROR;
-}
-
-LSDBreturn save_lsdb(LSDB *lsdb) {
-    ServiceState state = checkservice(); 
-
-    switch (state) {
-        case SERVICE_NOT_LAUNCHED:
-            printf("Service not launched");
-            return LSDB_ERROR_FILE_NOT_FOUND;
-
-        case SERVICE_LAUNCHED: {
-            FILE *f = fopen("test.bin", "wb");
-            if (!f) {
-                perror("Error opening file");
-                return LSDB_ERROR_FILE_NOT_FOUND;
-            }
-            
-            fwrite(&lsdb, sizeof(LSDB), 1, f);
-            fclose(f);
-            return LSDB_SUCCESS;
-        }
+ReturnCode retrieve_lsdb(LSDB *lsdb) {
+    if (!lsdb) {
+        ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
+        fprintf(stderr, "[retrieve_lsdb] %s\n", return_code_to_string(code));
+        return code;
     }
 
-    return LSDB_ERROR;
+    ReturnCode service_status = checkservice();
+    if (service_status != RETURN_SUCCESS) {
+        fprintf(stderr, "[retrieve_lsdb] %s\n", return_code_to_string(service_status));
+        return LSDB_ERROR_SERVICE_NOT_AVAILABLE;
+    }
+
+    FILE *f = fopen("test.bin", "rb");
+    if (!f) {
+        ReturnCode code = LSDB_ERROR_FILE_NOT_FOUND;
+        perror("[retrieve_lsdb] Error opening file");
+        fprintf(stderr, "%s\n", return_code_to_string(code));
+        return code;
+    }
+
+    size_t read_size = fread(lsdb, sizeof(LSDB), 1, f);
+    fclose(f);
+
+    if (read_size != 1) {
+        ReturnCode code = LSDB_ERROR_READ_FAILURE;
+        fprintf(stderr, "[retrieve_lsdb] %s\n", return_code_to_string(code));
+        return code;
+    }
+
+    printf("[retrieve_lsdb] Number of routers: %d\n", lsdb->numRouter);
+    return RETURN_SUCCESS;
 }
 
-int add_lsa (LSA *lsa, LSDB *lsdb) {
+ReturnCode save_lsdb(LSDB *lsdb) {
+    if (!lsdb) {
+        ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
+        fprintf(stderr, "[save_lsdb] %s\n", return_code_to_string(code));
+        return code;
+    }
+
+    ReturnCode service_status = checkservice();
+    if (service_status != RETURN_SUCCESS) {
+        fprintf(stderr, "[save_lsdb] %s\n", return_code_to_string(service_status));
+        return LSDB_ERROR_SERVICE_NOT_AVAILABLE;
+    }
+
+    FILE *f = fopen("test.bin", "wb");
+    if (!f) {
+        ReturnCode code = FILE_OPEN_ERROR;
+        perror("[save_lsdb] Error opening file");
+        fprintf(stderr, "%s\n", return_code_to_string(code));
+        return code;
+    }
+
+    size_t written = fwrite(lsdb, sizeof(LSDB), 1, f);
+    fclose(f);
+
+    if (written != 1) {
+        ReturnCode code = FILE_WRITE_ERROR;
+        fprintf(stderr, "[save_lsdb] %s\n", return_code_to_string(code));
+        return code;
+    }
+
+    return RETURN_SUCCESS;
+}
+
+ReturnCode add_lsa(LSA *lsa, LSDB *lsdb) {
+    if (!lsa || !lsdb) {
+        ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
+        fprintf(stderr, "[add_lsa] %s\n", return_code_to_string(code));
+        return code;
+    }
+
     if (lsdb->numRouter >= MAX_LSAS) {
-        printf("LSDB is full, cannot add more LSAs.\n");
-        return -1;
+        ReturnCode code = LSDB_ERROR_FULL_LSA;
+        fprintf(stderr, "[add_lsa] %s: LSDB is full\n", return_code_to_string(code));
+        return code;
     }
-    
+
     lsdb->lsda[lsdb->countLSA] = *lsa;
     lsdb->countLSA++;
 
-    save_lsdb(lsdb);
-    return 0;
+    ReturnCode save_status = save_lsdb(lsdb);
+    if (save_status != RETURN_SUCCESS) {
+        fprintf(stderr, "[add_lsa] Failed to save LSDB: %s\n", return_code_to_string(save_status));
+        return save_status;
+    }
+
+    return RETURN_SUCCESS;
+}
+
+ReturnCode remove_lsa(const char *nameRouter, const char *nameInterface, LSDB *lsdb) {
+    if (!nameRouter || !nameInterface || !lsdb) {
+        ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
+        fprintf(stderr, "[remove_lsa] %s\n", return_code_to_string(code));
+        return code;
+    }
+
+    int found = 0;
+
+    for (int i = 0; i < lsdb->countLSA; ++i) {
+        if (strcmp(lsdb->lsda[i].nameRouter, nameRouter) == 0 &&
+            strcmp(lsdb->lsda[i].interfaces.nameInterface, nameInterface) == 0) {
+
+            found = 1;
+
+            // Décaler les LSA suivantes
+            for (int j = i; j < lsdb->countLSA - 1; ++j) {
+                lsdb->lsda[j] = lsdb->lsda[j + 1];
+            }
+
+            lsdb->countLSA--;
+            break;
+        }
+    }
+
+    if (!found) {
+        ReturnCode code = LSDB_ERROR_LSA_NOT_FOUND;
+        fprintf(stderr, "[remove_lsa] %s: (%s, %s)\n", return_code_to_string(code), nameRouter, nameInterface);
+        return code;
+    }
+
+    ReturnCode save_status = save_lsdb(lsdb);
+    if (save_status != RETURN_SUCCESS) {
+        fprintf(stderr, "[remove_lsa] Failed to save LSDB: %s\n", return_code_to_string(save_status));
+        return save_status;
+    }
+
+    return RETURN_SUCCESS;
 }

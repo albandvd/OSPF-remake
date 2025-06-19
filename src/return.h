@@ -18,6 +18,7 @@ typedef enum {
     LSDB_ERROR_SERVICE_NOT_AVAILABLE,
     LSDB_ERROR_NULL_ARGUMENT,
     LSDB_ERROR_FULL_LSA,
+    LSDB_ERROR_LSA_NOT_FOUND,
 
     // ---- Réseau / Interface ----
     INTERFACE_NOT_FOUND,

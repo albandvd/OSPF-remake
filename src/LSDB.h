@@ -28,11 +28,9 @@ struct LSDB{
 };
 typedef struct LSDB LSDB;
 
-typedef enum {
-    LSDB_SUCCESS,
-    LSDB_ERROR_FILE_NOT_FOUND,
-    LSDB_ERROR_READ_FAILURE,
-    LSDB_ERROR
-} LSDBreturn;
+ReturnCode retrieve_lsdb(LSDB *lsdb);
+ReturnCode save_lsdb(LSDB *lsdb);
+ReturnCode add_lsa(LSA *lsa, LSDB *lsdb);
+ReturnCode remove_lsa(const char *nameRouter, const char *nameInterface, LSDB *lsdb);
 
 #endif
