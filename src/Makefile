@@ -1,16 +1,26 @@
 CC = gcc
-CFLAGS = -Wall -g
-TARGET = ospf
-SRCS = main.c interface.c check-service.c lsdb.c
-OBJS = $(SRCS:.c=.o)
+CFLAGS = -Wall -Wextra -g
+OBJ = check-service.o lsdb.o
 
-all: $(TARGET)
+all: main interface
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
+main: main.o $(OBJ)
+	$(CC) $(CFLAGS) -o main main.o $(OBJ)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+interface: interface.o $(OBJ)
+	$(CC) $(CFLAGS) -o interface interface.o $(OBJ)
+
+check-service.o: check-service.c check-service.h
+	$(CC) $(CFLAGS) -c check-service.c
+
+lsdb.o: lsdb.c LSDB.h
+	$(CC) $(CFLAGS) -c lsdb.c
+
+main.o: main.c check-service.h LSDB.h
+	$(CC) $(CFLAGS) -c main.c
+
+interface.o: interface.c check-service.h LSDB.h
+	$(CC) $(CFLAGS) -c interface.c
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f *.o main interface
