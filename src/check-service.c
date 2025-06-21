@@ -2,7 +2,7 @@
 #include "return.h"
 
 ReturnCode checkservice() {
-    FILE *file = fopen("ospf.bin", "rb");
+    FILE *file = fopen("lsdb.bin", "rb");
 
     if (!file) {
         fprintf(stderr, "[checkservice] %s\n", return_code_to_string(SERVICE_NOT_LAUNCHED));
