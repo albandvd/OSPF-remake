@@ -17,7 +17,7 @@ ReturnCode retrieve_lsdb(LSDB *lsdb) {
         return LSDB_ERROR_SERVICE_NOT_AVAILABLE;
     }
 
-    FILE *f = fopen("test.bin", "rb");
+    FILE *f = fopen("lsdb.bin", "rb");
     if (!f) {
         ReturnCode code = LSDB_ERROR_FILE_NOT_FOUND;
         perror("[retrieve_lsdb] Error opening file");
@@ -34,7 +34,6 @@ ReturnCode retrieve_lsdb(LSDB *lsdb) {
         return code;
     }
 
-    printf("[retrieve_lsdb] Number of routers: %d\n", lsdb->numRouter);
     return RETURN_SUCCESS;
 }
 
@@ -51,7 +50,7 @@ ReturnCode save_lsdb(LSDB *lsdb) {
         return LSDB_ERROR_SERVICE_NOT_AVAILABLE;
     }
 
-    FILE *f = fopen("test.bin", "wb");
+    FILE *f = fopen("lsdb.bin", "wb");
     if (!f) {
         ReturnCode code = FILE_OPEN_ERROR;
         perror("[save_lsdb] Error opening file");
@@ -78,13 +77,13 @@ ReturnCode add_lsa(LSA *lsa, LSDB *lsdb) {
         return code;
     }
 
-    if (lsdb->numRouter >= MAX_LSAS) {
+    if (lsdb->countLSA >= MAX_LSAS) {
         ReturnCode code = LSDB_ERROR_FULL_LSA;
         fprintf(stderr, "[add_lsa] %s: LSDB is full\n", return_code_to_string(code));
         return code;
     }
 
-    lsdb->lsda[lsdb->countLSA] = *lsa;
+    lsdb->lsa[lsdb->countLSA] = *lsa;
     lsdb->countLSA++;
 
     ReturnCode save_status = save_lsdb(lsdb);
@@ -96,8 +95,8 @@ ReturnCode add_lsa(LSA *lsa, LSDB *lsdb) {
     return RETURN_SUCCESS;
 }
 
-ReturnCode remove_lsa(const char *nameRouter, const char *nameInterface, LSDB *lsdb) {
-    if (!nameRouter || !nameInterface || !lsdb) {
+ReturnCode remove_lsa(const char *routerName, const char *nameInterface, LSDB *lsdb) {
+    if (!routerName || !nameInterface || !lsdb) {
         ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
         fprintf(stderr, "[remove_lsa] %s\n", return_code_to_string(code));
         return code;
@@ -106,14 +105,14 @@ ReturnCode remove_lsa(const char *nameRouter, const char *nameInterface, LSDB *l
     int found = 0;
 
     for (int i = 0; i < lsdb->countLSA; ++i) {
-        if (strcmp(lsdb->lsda[i].nameRouter, nameRouter) == 0 &&
-            strcmp(lsdb->lsda[i].interfaces.nameInterface, nameInterface) == 0) {
+        if (strcmp(lsdb->lsa[i].routerName, routerName) == 0 &&
+            strcmp(lsdb->lsa[i].interfaces.nameInterface, nameInterface) == 0) {
 
             found = 1;
 
             // Décaler les LSA suivantes
             for (int j = i; j < lsdb->countLSA - 1; ++j) {
-                lsdb->lsda[j] = lsdb->lsda[j + 1];
+                lsdb->lsa[j] = lsdb->lsa[j + 1];
             }
 
             lsdb->countLSA--;
@@ -123,7 +122,7 @@ ReturnCode remove_lsa(const char *nameRouter, const char *nameInterface, LSDB *l
 
     if (!found) {
         ReturnCode code = LSDB_ERROR_LSA_NOT_FOUND;
-        fprintf(stderr, "[remove_lsa] %s: (%s, %s)\n", return_code_to_string(code), nameRouter, nameInterface);
+        fprintf(stderr, "[remove_lsa] %s: (%s, %s)\n", return_code_to_string(code), routerName, nameInterface);
         return code;
     }
 

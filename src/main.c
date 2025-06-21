@@ -1,9 +1,19 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include "LSDB.h"
+#include "lsdb.h"
 #include "return.h"
+#include "global.h"
 
-int main() {
+int routerID = 0; 
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <param_int>\n", argv[0]);
+        return 1;
+    }
+    routerID = atoi(argv[1]);
+
     // Creation des interfaces
     Interface interface1 = {
         .nameInterface = "eth0",
@@ -22,19 +32,18 @@ int main() {
     };
 
     // Creation des LSAs
-    LSA lsa1 = {"R1", 1, interface1};
-    LSA lsa2 = {"R2", 2, interface2};
+    LSA lsa1 = {"R1", routerID, interface1};
+    LSA lsa2 = {"R2", routerID, interface2};
 
     // Creation de la LSDB
     LSDB lsdb = {
-        .numRouter = 1,
         .countLSA = 2,
-        .lsda = {lsa1, lsa2}
+        .lsa = {lsa1, lsa2}
     };
 
     printf("********* Saving LSDB *********\n");
 
-    FILE *f = fopen("test.bin", "wb");
+    FILE *f = fopen("lsdb.bin", "wb");
     if (!f) {
         ReturnCode code = FILE_OPEN_ERROR;
         perror("Error opening file");

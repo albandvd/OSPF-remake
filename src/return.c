@@ -4,6 +4,8 @@ const char* return_code_to_string(ReturnCode code) {
     switch (code) {
         case RETURN_SUCCESS: return "Success";
         case RETURN_UNKNOWN_ERROR: return "Unknown error";
+        case ERROR_INVALID_COMMAND: return "Invalid command";
+        case ERROR_INVALID_ARGUMENT: return "Invalid argument";
 
         // Service
         case SERVICE_LAUNCHED: return "Service launched";
@@ -24,6 +26,7 @@ const char* return_code_to_string(ReturnCode code) {
         case INTERFACE_ALREADY_EXISTS: return "Interface already exists";
         case INTERFACE_ADDED: return "Interface added successfully";
         case INTERFACE_DELETED: return "Interface deleted successfully";
+        case SYSTEM_CALL_FAILURE: return "System call failure";
 
         // Fichier / I/O
         case FILE_OPEN_ERROR: return "File open error";
@@ -31,6 +34,6 @@ const char* return_code_to_string(ReturnCode code) {
         case FILE_READ_ERROR: return "File read error";
         case FILE_CLOSE_ERROR: return "File close error";
 
-        default: return "Unlisted return code";
+        default: return "Unlisted return code, c nwar";
     }
 }

@@ -5,7 +5,7 @@
 Pour tester l'infrastructure lancer la commande suivante à la racine du projet: 
 
 ``` sh 
-docker-compose up -d
+docker-compose up -d --build
 ```
 
 Assurez vous d'avoir mis à jour le Makefile pour que les modifications soient bien prise en compte 

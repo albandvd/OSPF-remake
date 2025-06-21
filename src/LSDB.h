@@ -1,6 +1,8 @@
 #ifndef LSDB_H
 #define LSDB_H
 
+#include "return.h"
+
 #define IFNAMSIZ 16
 #define MAX_LSAS 10 // Tableau de 10 LSDA nb nécessaire pour les tests
 
@@ -10,21 +12,19 @@ struct Interface{
     char mask[16];
     char network[16];
     char mac[18];
-    int idRouter;
 };
 typedef struct Interface Interface;
 
 struct LSA{
-    char nameRouter[3];
-    int numRouter;
+    char routerName[3];
+    int routerID; 
     Interface interfaces; 
 };
 typedef struct LSA LSA;
 
 struct LSDB{
-    int numRouter;
     int countLSA;
-    LSA lsda[MAX_LSAS];
+    LSA lsa[MAX_LSAS];
 };
 typedef struct LSDB LSDB;
 

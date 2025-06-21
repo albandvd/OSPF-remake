@@ -5,6 +5,8 @@ typedef enum {
     // ---- Général / succès ----
     RETURN_SUCCESS = 0,
     RETURN_UNKNOWN_ERROR,
+    ERROR_INVALID_COMMAND,
+    ERROR_INVALID_ARGUMENT,
 
     // ---- Service ----
     SERVICE_LAUNCHED,
@@ -25,6 +27,7 @@ typedef enum {
     INTERFACE_ALREADY_EXISTS,
     INTERFACE_ADDED,
     INTERFACE_DELETED,
+    SYSTEM_CALL_FAILURE,
 
     // ---- Fichier / I/O ----
     FILE_OPEN_ERROR,

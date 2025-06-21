@@ -2,13 +2,13 @@
 #include "return.h"
 
 ReturnCode checkservice() {
-    FILE *file = fopen("test.bin", "rb");
+    FILE *file = fopen("ospf.bin", "rb");
 
     if (!file) {
-        fprintf(stderr, "[checkservice] %s\n", return_code_to_string(FILE_OPEN_ERROR));
-        return FILE_OPEN_ERROR;
+        fprintf(stderr, "[checkservice] %s\n", return_code_to_string(SERVICE_NOT_LAUNCHED));
+        return SERVICE_NOT_LAUNCHED;
     }
 
     fclose(file);
-    return RETURN_SUCCESS;
+    return SERVICE_LAUNCHED;
 }
