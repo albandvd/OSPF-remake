@@ -6,32 +6,33 @@
 
 ReturnCode retrieve_lsdb(LSDB *lsdb) {
     if (!lsdb) {
-        ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
-        fprintf(stderr, "[retrieve_lsdb] %s\n", return_code_to_string(code));
-        return code;
+        fprintf(stderr, "[retrieve_lsdb] Argument LSDB NULL\n");
+        return LSDB_ERROR_NULL_ARGUMENT;
     }
 
     ReturnCode service_status = checkservice();
     if (service_status != RETURN_SUCCESS) {
-        fprintf(stderr, "[retrieve_lsdb] %s\n", return_code_to_string(service_status));
+        fprintf(stderr, "[retrieve_lsdb] Service not available: %s\n", return_code_to_string(service_status));
         return LSDB_ERROR_SERVICE_NOT_AVAILABLE;
     }
 
     FILE *f = fopen("lsdb.bin", "rb");
     if (!f) {
-        ReturnCode code = LSDB_ERROR_FILE_NOT_FOUND;
-        perror("[retrieve_lsdb] Error opening file");
-        fprintf(stderr, "%s\n", return_code_to_string(code));
-        return code;
+        // Fichier inexistant : on initialise la LSDB à vide
+        memset(lsdb, 0, sizeof(LSDB));
+        lsdb->countLSA = 0;
+        fprintf(stderr, "[retrieve_lsdb] lsdb.bin not found, initializing empty LSDB.\n");
+        return RETURN_SUCCESS;
     }
 
     size_t read_size = fread(lsdb, sizeof(LSDB), 1, f);
     fclose(f);
 
     if (read_size != 1) {
-        ReturnCode code = LSDB_ERROR_READ_FAILURE;
-        fprintf(stderr, "[retrieve_lsdb] %s\n", return_code_to_string(code));
-        return code;
+        fprintf(stderr, "[retrieve_lsdb] Erreur de lecture du fichier lsdb.bin\n");
+        memset(lsdb, 0, sizeof(LSDB));
+        lsdb->countLSA = 0;
+        return LSDB_ERROR_READ_FAILURE;
     }
 
     return RETURN_SUCCESS;
