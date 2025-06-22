@@ -13,6 +13,28 @@
 
 // Usage : ./prog [add|delete] <interface_name>
 int main(int argc, char* argv[]) {
+    if (argc >= 2 && strcmp(argv[1], "show") == 0) {
+        LSDB lsdb;
+        ReturnCode code = retrieve_lsdb(&lsdb);
+        if (code != RETURN_SUCCESS) {
+            fprintf(stderr, "Erreur lors de la récupération de la LSDB.\n");
+            return code;
+        }
+        printf("===== LSDB =====\n");
+        for (int i = 0; i < lsdb.countLSA; ++i) {
+            LSA *lsa = &lsdb.lsa[i];
+            printf("LSA %d : RouterName=%s, RouterID=%d\n",
+                   i+1, lsa->routerName, lsa->routerID);
+            printf("  Interface :\n");
+            printf("    Name    : %s\n", lsa->interfaces.nameInterface);
+            printf("    IP      : %s\n", lsa->interfaces.ip);
+            printf("    Mask    : %s\n", lsa->interfaces.mask);
+            printf("    Network : %s\n", lsa->interfaces.network);
+            printf("    MAC     : %s\n", lsa->interfaces.mac);
+        }
+        return RETURN_SUCCESS;
+    }
+
     if (argc < 3) {
         fprintf(stderr, "Usage: %s [add|delete] <interface_name>\n", argv[0]);
         return ERROR_INVALID_COMMAND;
