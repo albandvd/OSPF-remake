@@ -5,7 +5,6 @@ services:
     build: ./
     container_name: r1
     hostname: r1
-    command: tail -f /dev/null
     networks:
       N_C1:
         ipv4_address: 10.1.0.1
@@ -14,7 +13,6 @@ services:
     build: ./
     container_name: r2
     hostname: r2
-    command: tail -f /dev/null
     networks:
       N_C1:
         ipv4_address: 10.1.0.2
@@ -25,7 +23,6 @@ services:
     build: ./
     container_name: r3
     hostname: r3
-    command: tail -f /dev/null
     networks:
       N_C3:
         ipv4_address: 10.3.0.3
@@ -35,7 +32,6 @@ services:
     build: ./
     container_name: r4
     hostname: r4
-    command: tail -f /dev/null
     networks:
       N_C1:
         ipv4_address: 10.1.0.4
@@ -47,7 +43,6 @@ services:
     build: ./
     container_name: r5
     hostname: r5
-    command: tail -f /dev/null
     networks:
       N_C2:
         ipv4_address: 10.2.0.5

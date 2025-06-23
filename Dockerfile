@@ -11,4 +11,4 @@ RUN chmod +x /opt/entrypoint.sh
 WORKDIR /opt/ospf
 RUN make
 
-#RUN /opt/entrypoint.sh
+ENTRYPOINT ["/opt/entrypoint.sh"]
