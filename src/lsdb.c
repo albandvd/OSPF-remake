@@ -1,19 +1,13 @@
 #include "lsdb.h"
 #include "return.h"
-#include "check-service.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 ReturnCode retrieve_lsdb(LSDB *lsdb) {
     if (!lsdb) {
         fprintf(stderr, "[retrieve_lsdb] Argument LSDB NULL\n");
         return LSDB_ERROR_NULL_ARGUMENT;
-    }
-
-    ReturnCode service_status = checkservice();
-    if (service_status != RETURN_SUCCESS) {
-        fprintf(stderr, "[retrieve_lsdb] Service not available: %s\n", return_code_to_string(service_status));
-        return LSDB_ERROR_SERVICE_NOT_AVAILABLE;
     }
 
     FILE *f = fopen("lsdb.bin", "rb");
@@ -43,12 +37,6 @@ ReturnCode save_lsdb(LSDB *lsdb) {
         ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
         fprintf(stderr, "[save_lsdb] %s\n", return_code_to_string(code));
         return code;
-    }
-
-    ReturnCode service_status = checkservice();
-    if (service_status != RETURN_SUCCESS) {
-        fprintf(stderr, "[save_lsdb] %s\n", return_code_to_string(service_status));
-        return LSDB_ERROR_SERVICE_NOT_AVAILABLE;
     }
 
     FILE *f = fopen("lsdb.bin", "wb");
@@ -133,5 +121,27 @@ ReturnCode remove_lsa(const char *routerName, const char *nameInterface, LSDB *l
         return save_status;
     }
 
+    return RETURN_SUCCESS;
+}
+
+ReturnCode get_routerId(int *routerID) {
+    if (!routerID) {
+        fprintf(stderr, "[get_routerId] Argument routerID NULL\n");
+        return ROUTER_ID_NOT_FOUND;
+    }
+
+    FILE *f = fopen("router_id.txt", "r");
+    if (!f) {
+        fprintf(stderr, "[get_routerId] Error opening router_id.txt\n");
+        return FILE_OPEN_ERROR;
+    }
+
+    if (fscanf(f, "%d", routerID) != 1) {
+        fclose(f);
+        fprintf(stderr, "[get_routerId] Error reading router ID from file\n");
+        return ROUTER_ID_ERROR_READ_FAILURE;
+    }
+
+    fclose(f);
     return RETURN_SUCCESS;
 }

@@ -32,5 +32,6 @@ ReturnCode retrieve_lsdb(LSDB *lsdb);
 ReturnCode save_lsdb(LSDB *lsdb);
 ReturnCode add_lsa(LSA *lsa, LSDB *lsdb);
 ReturnCode remove_lsa(const char *nameRouter, const char *nameInterface, LSDB *lsdb);
+ReturnCode get_routerId(int *routerID);
 
 #endif

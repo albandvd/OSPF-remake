@@ -10,9 +10,9 @@
 #include <net/if.h>
 #include <unistd.h>
 #include <ifaddrs.h>
-
 // Usage : ./prog [add|delete] <interface_name>
 int main(int argc, char* argv[]) {
+    printf("router id %d \n", routerID);
     if (argc >= 2 && strcmp(argv[1], "show") == 0) {
         LSDB lsdb;
         ReturnCode code = retrieve_lsdb(&lsdb);
@@ -123,8 +123,35 @@ int main(int argc, char* argv[]) {
                 printf("  Network Addr : %s\n", network);
                 printf("  MAC Address  : %s\n", mac_address);
 
-                // TODO: ajout logique réelle ici
+                // Ajout réel à la LSDB
+                LSA new_lsa;
+                memset(&new_lsa, 0, sizeof(new_lsa));
+                char hostname[3];
+                gethostname(hostname, sizeof(hostname));
+                if (get_routerId(&routerID) != RETURN_SUCCESS) {
+                    fprintf(stderr, "Erreur lors de la récupération du Router ID.\n");
+                    freeifaddrs(ifap);
+                    return ROUTER_ID_NOT_FOUND;
+                }
 
+                strncpy(new_lsa.routerName, hostname, sizeof(new_lsa.routerName) - 1);
+                new_lsa.routerID = routerID;
+                new_lsa.interfaces = new_interface;
+
+                LSDB lsdb;
+                ReturnCode code = retrieve_lsdb(&lsdb);
+                if (code != RETURN_SUCCESS) {
+                    fprintf(stderr, "Erreur lors de la récupération de la LSDB.\n");
+                    freeifaddrs(ifap);
+                    return code;
+                }
+                code = add_lsa(&new_lsa, &lsdb);
+                if (code != RETURN_SUCCESS) {
+                    fprintf(stderr, "Erreur lors de l'ajout de la LSA à la LSDB.\n");
+                    freeifaddrs(ifap);
+                    return code;
+                }
+                printf("LSA ajoutée à la LSDB avec succès.\n");
                 freeifaddrs(ifap);
                 return INTERFACE_ADDED;
             } else if (strcmp(command, "delete") == 0) {

@@ -3,16 +3,21 @@
 #include <string.h>
 #include "lsdb.h"
 #include "return.h"
-#include "global.h"
-
-int routerID = 0; 
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <param_int>\n", argv[0]);
         return 1;
     }
-    routerID = atoi(argv[1]);
+    int routerID = atoi(argv[1]);
+    printf("Router ID: %d\n", routerID);
+
+    FILE *f_router = fopen("router_id.txt", "w");
+    if (!f_router) {
+        perror("Erreur lors de l'ouverture de router_id.txt");
+        return 2;
+    }
+    fclose(f_router);
 
     // Creation des interfaces
     Interface interface1 = {

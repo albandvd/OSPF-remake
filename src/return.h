@@ -22,12 +22,15 @@ typedef enum {
     LSDB_ERROR_FULL_LSA,
     LSDB_ERROR_LSA_NOT_FOUND,
 
-    // ---- Réseau / Interface ----
+    // ---- Réseau / Interface / Router ID----
     INTERFACE_NOT_FOUND,
     INTERFACE_ALREADY_EXISTS,
     INTERFACE_ADDED,
     INTERFACE_DELETED,
     SYSTEM_CALL_FAILURE,
+    ROUTER_ID_NOT_FOUND,
+    ROUTER_ID_ERROR_READ_FAILURE,
+
 
     // ---- Fichier / I/O ----
     FILE_OPEN_ERROR,
