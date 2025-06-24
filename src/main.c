@@ -12,12 +12,14 @@ int main(int argc, char *argv[]) {
     int routerID = atoi(argv[1]);
     printf("Router ID: %d\n", routerID);
 
-    FILE *f_router = fopen("router_id.txt", "w");
-    if (!f_router) {
-        perror("Erreur lors de l'ouverture de router_id.txt");
-        return 2;
+    FILE *routerID_file = fopen("routerID.txt", "w");
+    if (!routerID_file) {
+        ReturnCode code = FILE_OPEN_ERROR;
+        fprintf(stderr, "[main] %s\n", return_code_to_string(code));
+        return code;
     }
-    fclose(f_router);
+    fprintf(routerID_file, "%d\n", routerID);
+    fclose(routerID_file);
 
     // Creation des interfaces
     Interface interface1 = {
@@ -51,7 +53,6 @@ int main(int argc, char *argv[]) {
     FILE *f = fopen("lsdb.bin", "wb");
     if (!f) {
         ReturnCode code = FILE_OPEN_ERROR;
-        perror("Error opening file");
         fprintf(stderr, "[main] %s\n", return_code_to_string(code));
         return code;
     }

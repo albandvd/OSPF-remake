@@ -130,7 +130,7 @@ ReturnCode get_routerId(int *routerID) {
         return ROUTER_ID_NOT_FOUND;
     }
 
-    FILE *f = fopen("router_id.txt", "r");
+    FILE *f = fopen("routerID.txt", "r");
     if (!f) {
         fprintf(stderr, "[get_routerId] Error opening router_id.txt\n");
         return FILE_OPEN_ERROR;

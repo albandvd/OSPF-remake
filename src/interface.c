@@ -12,7 +12,6 @@
 #include <ifaddrs.h>
 // Usage : ./prog [add|delete] <interface_name>
 int main(int argc, char* argv[]) {
-    printf("router id %d \n", routerID);
     if (argc >= 2 && strcmp(argv[1], "show") == 0) {
         LSDB lsdb;
         ReturnCode code = retrieve_lsdb(&lsdb);
@@ -127,6 +126,7 @@ int main(int argc, char* argv[]) {
                 LSA new_lsa;
                 memset(&new_lsa, 0, sizeof(new_lsa));
                 char hostname[3];
+                int routerID;
                 gethostname(hostname, sizeof(hostname));
                 if (get_routerId(&routerID) != RETURN_SUCCESS) {
                     fprintf(stderr, "Erreur lors de la récupération du Router ID.\n");
