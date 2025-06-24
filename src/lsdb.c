@@ -12,34 +12,6 @@
 #include "lsdb.h"
 #include "return.h"
 
-ReturnCode retrieve_lsdb(LSDB *lsdb) {
-    if (!lsdb) {
-        fprintf(stderr, "[retrieve_lsdb] Argument LSDB NULL\n");
-        return LSDB_ERROR_NULL_ARGUMENT;
-    }
-
-    FILE *f = fopen("lsdb.bin", "rb");
-    if (!f) {
-        // Fichier inexistant : on initialise la LSDB à vide
-        memset(lsdb, 0, sizeof(LSDB));
-        lsdb->countLSA = 0;
-        fprintf(stderr, "[retrieve_lsdb] lsdb.bin not found, initializing empty LSDB.\n");
-        return RETURN_SUCCESS;
-    }
-
-    size_t read_size = fread(lsdb, sizeof(LSDB), 1, f);
-    fclose(f);
-
-    if (read_size != 1) {
-        fprintf(stderr, "[retrieve_lsdb] Erreur de lecture du fichier lsdb.bin\n");
-        memset(lsdb, 0, sizeof(LSDB));
-        lsdb->countLSA = 0;
-        return LSDB_ERROR_READ_FAILURE;
-    }
-
-    return RETURN_SUCCESS;
-}
-
 ReturnCode init_json(const char *output_file){
     json_t *root = json_object();
     if (!root)
@@ -244,116 +216,38 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip, c
     return RETURN_SUCCESS;
 }
 
-ReturnCode save_lsdb(LSDB *lsdb) {
-    if (!lsdb) {
-        ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
-        fprintf(stderr, "[save_lsdb] %s\n", return_code_to_string(code));
-        return code;
+// Met à jour is_Ospf à 1 pour l'interface donnée dans le JSON
+ReturnCode set_is_ospf(const char *json_file, const char *interface_name) {
+    json_error_t error;
+    json_t *root = json_load_file(json_file, 0, &error);
+    if (!root) {
+        fprintf(stderr, "Erreur lors de l'ouverture du fichier JSON '%s' : %s\n", json_file, error.text);
+        return JSON_LOAD_ERROR;
     }
-
-    FILE *f = fopen("lsdb.bin", "wb");
-    if (!f) {
-        ReturnCode code = FILE_OPEN_ERROR;
-        perror("[save_lsdb] Error opening file");
-        fprintf(stderr, "%s\n", return_code_to_string(code));
-        return code;
+    json_t *connected = json_object_get(root, "connected");
+    if (!connected || !json_is_array(connected)) {
+        json_decref(root);
+        return JSON_LOAD_ERROR;
     }
-
-    size_t written = fwrite(lsdb, sizeof(LSDB), 1, f);
-    fclose(f);
-
-    if (written != 1) {
-        ReturnCode code = FILE_WRITE_ERROR;
-        fprintf(stderr, "[save_lsdb] %s\n", return_code_to_string(code));
-        return code;
-    }
-
-    return RETURN_SUCCESS;
-}
-
-ReturnCode add_lsa(LSA *lsa, LSDB *lsdb) {
-    if (!lsa || !lsdb) {
-        ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
-        fprintf(stderr, "[add_lsa] %s\n", return_code_to_string(code));
-        return code;
-    }
-
-    if (lsdb->countLSA >= MAX_LSAS) {
-        ReturnCode code = LSDB_ERROR_FULL_LSA;
-        fprintf(stderr, "[add_lsa] %s: LSDB is full\n", return_code_to_string(code));
-        return code;
-    }
-
-    lsdb->lsa[lsdb->countLSA] = *lsa;
-    lsdb->countLSA++;
-
-    ReturnCode save_status = save_lsdb(lsdb);
-    if (save_status != RETURN_SUCCESS) {
-        fprintf(stderr, "[add_lsa] Failed to save LSDB: %s\n", return_code_to_string(save_status));
-        return save_status;
-    }
-
-    return RETURN_SUCCESS;
-}
-
-ReturnCode remove_lsa(const char *routerName, const char *nameInterface, LSDB *lsdb) {
-    if (!routerName || !nameInterface || !lsdb) {
-        ReturnCode code = LSDB_ERROR_NULL_ARGUMENT;
-        fprintf(stderr, "[remove_lsa] %s\n", return_code_to_string(code));
-        return code;
-    }
-
+    size_t i;
+    json_t *entry;
     int found = 0;
-
-    for (int i = 0; i < lsdb->countLSA; ++i) {
-        if (strcmp(lsdb->lsa[i].routerName, routerName) == 0 &&
-            strcmp(lsdb->lsa[i].interfaces.nameInterface, nameInterface) == 0) {
-
+    json_array_foreach(connected, i, entry) {
+        const char *gateway = json_string_value(json_object_get(entry, "gateway"));
+        if (gateway && strcmp(gateway, interface_name) == 0) {
+            json_object_set_new(entry, "is_Ospf", json_integer(1));
             found = 1;
-
-            // Décaler les LSA suivantes
-            for (int j = i; j < lsdb->countLSA - 1; ++j) {
-                lsdb->lsa[j] = lsdb->lsa[j + 1];
-            }
-
-            lsdb->countLSA--;
             break;
         }
     }
-
     if (!found) {
-        ReturnCode code = LSDB_ERROR_LSA_NOT_FOUND;
-        fprintf(stderr, "[remove_lsa] %s: (%s, %s)\n", return_code_to_string(code), routerName, nameInterface);
-        return code;
+        json_decref(root);
+        return INTERFACE_NOT_FOUND;
     }
-
-    ReturnCode save_status = save_lsdb(lsdb);
-    if (save_status != RETURN_SUCCESS) {
-        fprintf(stderr, "[remove_lsa] Failed to save LSDB: %s\n", return_code_to_string(save_status));
-        return save_status;
+    if (json_dump_file(root, json_file, JSON_INDENT(4)) != 0) {
+        json_decref(root);
+        return JSON_DUMP_ERROR;
     }
-
-    return RETURN_SUCCESS;
-}
-
-ReturnCode get_routerId(int *routerID) {
-    if (!routerID) {
-        fprintf(stderr, "[get_routerId] Argument routerID NULL\n");
-        return ROUTER_ID_NOT_FOUND;
-    }
-
-    FILE *f = fopen("routerID.txt", "r");
-    if (!f) {
-        fprintf(stderr, "[get_routerId] Error opening router_id.txt\n");
-        return FILE_OPEN_ERROR;
-    }
-
-    if (fscanf(f, "%d", routerID) != 1) {
-        fclose(f);
-        fprintf(stderr, "[get_routerId] Error reading router ID from file\n");
-        return ROUTER_ID_ERROR_READ_FAILURE;
-    }
-
-    fclose(f);
+    json_decref(root);
     return RETURN_SUCCESS;
 }
