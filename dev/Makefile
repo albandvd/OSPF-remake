@@ -2,6 +2,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -I.  # -I. pour inclure le dossier courant (où se trouve hello.h)
 BUILD_DIR = build
+LDFLAGS = -ljansson
 
 CLIENT_SRC = Client/client.c
 SERVER_SRC = Server/server.c
@@ -20,7 +21,7 @@ $(BUILD_DIR):
 
 # Compilation du client
 $(CLIENT_BIN): $(CLIENT_SRC) hello.h | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $@ $(CLIENT_SRC)
+	$(CC) $(CFLAGS) -o $@ $(CLIENT_SRC) $(LDFLAGS)
 
 # Compilation du serveur
 $(SERVER_BIN): $(SERVER_SRC) hello.h | $(BUILD_DIR)
