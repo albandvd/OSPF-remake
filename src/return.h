@@ -30,7 +30,7 @@ typedef enum {
     SYSTEM_CALL_FAILURE,
     ROUTER_ID_NOT_FOUND,
     ROUTER_ID_ERROR_READ_FAILURE,
-
+    HOSTNAME_ERROR,
 
     // ---- Fichier / I/O ----
     FILE_OPEN_ERROR,
@@ -45,6 +45,21 @@ typedef enum {
     ROUTE_DELETE_ERROR,
     ROUTE_IOCTL_ERROR,
     ROUTE_SOCKET_ERROR,
+
+    // ---- JSON ----
+    JSON_PARSE_ERROR,
+    JSON_LOAD_ERROR,
+    JSON_DUMP_ERROR,
+    JSON_WRITE_ERROR,
+    JSON_READ_ERROR,
+    JSON_OBJECT_NOT_FOUND,
+    JSON_ARRAY_NOT_FOUND,
+    JSON_WRITE_SUCCESS,
+
+    // ---- Exchanges ----
+    EXCHANGE_SUCCESS,
+    EXCHANGE_FAILURE,
+    
 
 } ReturnCode;
 

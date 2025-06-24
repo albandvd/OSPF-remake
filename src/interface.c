@@ -1,6 +1,8 @@
 #include "lsdb.h"
 #include "return.h"
 #include "check-service.h"
+#include "exchanges.h"
+#include "route.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -14,35 +16,13 @@
 
 // Usage : ./prog [add|delete] <interface_name>
 int main(int argc, char* argv[]) {
-    if (argc >= 2 && strcmp(argv[1], "show") == 0) {
-        LSDB lsdb;
-        ReturnCode code = retrieve_lsdb(&lsdb);
-        if (code != RETURN_SUCCESS) {
-            fprintf(stderr, "Erreur lors de la récupération de la LSDB.\n");
-            return code;
-        }
-        printf("===== LSDB =====\n");
-        for (int i = 0; i < lsdb.countLSA; ++i) {
-            LSA *lsa = &lsdb.lsa[i];
-            printf("LSA %d : RouterName=%s, RouterID=%d\n",
-                   i+1, lsa->routerName, lsa->routerID);
-            printf("  Interface :\n");
-            printf("    Name    : %s\n", lsa->interfaces.nameInterface);
-            printf("    IP      : %s\n", lsa->interfaces.ip);
-            printf("    Mask    : %s\n", lsa->interfaces.mask);
-            printf("    Network : %s\n", lsa->interfaces.network);
-            printf("    MAC     : %s\n", lsa->interfaces.mac);
-        }
-        return RETURN_SUCCESS;
-    }
-
     if (argc < 3) {
         fprintf(stderr, "Usage: %s [add|delete] <interface_name>\n", argv[0]);
         return ERROR_INVALID_COMMAND;
     }
 
     const char *command = argv[1];
-    const char *interface_name = argv[2];
+    const char *interface = argv[2];
 
     ReturnCode service_state = checkservice();
     if (service_state == SERVICE_NOT_LAUNCHED) {
@@ -50,132 +30,160 @@ int main(int argc, char* argv[]) {
         return SERVICE_NOT_LAUNCHED;
     }
 
-    struct ifaddrs *ifap = NULL, *ifa = NULL;
-    if (getifaddrs(&ifap) != 0) {
-        perror("getifaddrs failed");
-        return LSDB_ERROR_READ_FAILURE;
-    }
+    if (strcmp(command, "add") == 0) {
+        struct ifaddrs *ifaddr, *ifa;
+        char ip_str[INET_ADDRSTRLEN], netmask_str[INET_ADDRSTRLEN];
+        uint32_t my_ip = 0, netmask = 0;
 
-    int interface_found = 0;
-
-    for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
-        if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) {
-            continue;
+        if (getifaddrs(&ifaddr) == -1)
+        {
+            perror("getifaddrs");
+            return EXIT_FAILURE;
         }
 
-        if (strcmp(ifa->ifa_name, interface_name) == 0) {
-            interface_found = 1;
+        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
+        {
+            if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET)
+                continue;
 
-            struct sockaddr_in *sa = (struct sockaddr_in *)ifa->ifa_addr;
-            struct sockaddr_in *nm = (struct sockaddr_in *)ifa->ifa_netmask;
+            if (strcmp(ifa->ifa_name, interface) == 0)
+            {
+                struct sockaddr_in *addr = (struct sockaddr_in *)ifa->ifa_addr;
+                struct sockaddr_in *mask = (struct sockaddr_in *)ifa->ifa_netmask;
 
-            char ip[INET_ADDRSTRLEN] = {0};
-            char netmask[INET_ADDRSTRLEN] = "N/A";
-            char broadcast[INET_ADDRSTRLEN] = "N/A";
-            char network[INET_ADDRSTRLEN] = "N/A";
+                my_ip = ntohl(addr->sin_addr.s_addr);
+                netmask = ntohl(mask->sin_addr.s_addr);
 
-            strncpy(ip, inet_ntoa(sa->sin_addr), INET_ADDRSTRLEN - 1);
+                inet_ntop(AF_INET, &addr->sin_addr, ip_str, INET_ADDRSTRLEN);
+                inet_ntop(AF_INET, &mask->sin_addr, netmask_str, INET_ADDRSTRLEN);
 
-            if (ifa->ifa_netmask) {
-                strncpy(netmask, inet_ntoa(nm->sin_addr), INET_ADDRSTRLEN - 1);
-
-                // Calcul de l'adresse réseau (IP & Netmask)
-                struct in_addr net_addr;
-                net_addr.s_addr = sa->sin_addr.s_addr & nm->sin_addr.s_addr;
-                strncpy(network, inet_ntoa(net_addr), INET_ADDRSTRLEN - 1);
-            }
-
-            if (ifa->ifa_broadaddr) {
-                struct sockaddr_in *br = (struct sockaddr_in *)ifa->ifa_broadaddr;
-                strncpy(broadcast, inet_ntoa(br->sin_addr), INET_ADDRSTRLEN - 1);
-            }
-
-            // Récupération de l'adresse MAC
-            char mac_address[18] = "N/A";
-            int fd = socket(AF_INET, SOCK_DGRAM, 0);
-            if (fd >= 0) {
-                struct ifreq ifr;
-                memset(&ifr, 0, sizeof(ifr));
-                strncpy(ifr.ifr_name, ifa->ifa_name, IFNAMSIZ - 1);
-                if (ioctl(fd, SIOCGIFHWADDR, &ifr) == 0) {
-                    unsigned char *mac = (unsigned char *)ifr.ifr_hwaddr.sa_data;
-                    snprintf(mac_address, sizeof(mac_address), "%02x:%02x:%02x:%02x:%02x:%02x",
-                             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-                }
-                close(fd);
-            }
-
-            printf("Interface: %s\tAddress: %s\n", ifa->ifa_name, ip);
-
-            if (strcmp(command, "add") == 0) {
-                printf("Adding interface: %s\n", ifa->ifa_name);
-
-                Interface new_interface;
-                memset(&new_interface, 0, sizeof(new_interface));
-                strncpy(new_interface.nameInterface, ifa->ifa_name, sizeof(new_interface.nameInterface) - 1);
-                strncpy(new_interface.ip, ip, sizeof(new_interface.ip) - 1);
-                strncpy(new_interface.mask, netmask, sizeof(new_interface.mask) - 1);
-                strncpy(new_interface.network, network, sizeof(new_interface.network) - 1);
-                strncpy(new_interface.mac, mac_address, sizeof(new_interface.mac) - 1);
-
-                printf("  IP Address   : %s\n", ip);
-                printf("  Netmask      : %s\n", netmask);
-                printf("  Broadcast    : %s\n", broadcast);
-                printf("  Network Addr : %s\n", network);
-                printf("  MAC Address  : %s\n", mac_address);
-
-                // Ajout réel à la LSDB
-                LSA new_lsa;
-                memset(&new_lsa, 0, sizeof(new_lsa));
-                char hostname[3];
-                int routerID;
-                gethostname(hostname, sizeof(hostname));
-                if (get_routerId(&routerID) != RETURN_SUCCESS) {
-                    fprintf(stderr, "Erreur lors de la récupération du Router ID.\n");
-                    freeifaddrs(ifap);
-                    return ROUTER_ID_NOT_FOUND;
-                }
-
-                strncpy(new_lsa.routerName, hostname, sizeof(new_lsa.routerName) - 1);
-                new_lsa.routerID = routerID;
-                new_lsa.interfaces = new_interface;
-
-                LSDB lsdb;
-                ReturnCode code = retrieve_lsdb(&lsdb);
-                if (code != RETURN_SUCCESS) {
-                    fprintf(stderr, "Erreur lors de la récupération de la LSDB.\n");
-                    freeifaddrs(ifap);
-                    return code;
-                }
-                code = add_lsa(&new_lsa, &lsdb);
-                if (code != RETURN_SUCCESS) {
-                    fprintf(stderr, "Erreur lors de l'ajout de la LSA à la LSDB.\n");
-                    freeifaddrs(ifap);
-                    return code;
-                }
-                printf("LSA ajoutée à la LSDB avec succès.\n");
-                freeifaddrs(ifap);
-                return INTERFACE_ADDED;
-            } else if (strcmp(command, "delete") == 0) {
-                printf("Deleting interface: %s\n", ifa->ifa_name);
-
-                // TODO: Ajouter la logique réelle pour supprimer l'interface
-
-                freeifaddrs(ifap);
-                return INTERFACE_DELETED;
-            } else {
-                fprintf(stderr, "Invalid command. Use 'add' or 'delete'.\n");
-                freeifaddrs(ifap);
-                return ERROR_INVALID_COMMAND;
+                printf("Interface détectée : %s\n", interface);
+                printf("Adresse IP locale  : %s\n", ip_str);
+                printf("Masque de sous-réseau : %s\n", netmask_str);
+                break;
             }
         }
-    }
 
-    freeifaddrs(ifap);
+        freeifaddrs(ifaddr);
 
-    if (!interface_found) {
-        fprintf(stderr, "Interface '%s' not found.\n", interface_name);
-        return INTERFACE_NOT_FOUND;
+        // Erreur si aucune interface n'a été trouvée.
+        if (my_ip == 0 || netmask == 0)
+        {
+            fprintf(stderr, "Erreur : interface %s non trouvée ou sans IPv4\n", interface);
+            return EXIT_FAILURE;
+        }
+
+        uint32_t network = my_ip & netmask;
+        uint32_t broadcast = network | (~netmask);
+
+        printf("Réseau détecté : %u.%u.%u.%u/24\n",
+            (network >> 24) & 0xFF,
+            (network >> 16) & 0xFF,
+            (network >> 8) & 0xFF,
+            network & 0xFF);
+
+        for (uint32_t ip = network + 1; ip < broadcast; ip++)
+        {
+            if (ip == my_ip)
+                continue; // éviter de s’auto-scanner
+
+            struct in_addr addr;
+            addr.s_addr = htonl(ip);
+            char target_ip[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &addr, target_ip, INET_ADDRSTRLEN);
+
+            printf("Scanning %s...\n", target_ip);
+            exchanges(target_ip);
+
+            usleep(10000); // petit délai (10 ms) pour éviter surcharge CPU
+        }
+        
+        int sockfd,
+        client_sock;
+        struct sockaddr_in serv_addr, cli_addr;
+        socklen_t cli_len = sizeof(cli_addr);
+
+        // Création de la socket
+        sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        if (sockfd < 0)
+        {
+            perror("socket");
+            exit(EXIT_FAILURE);
+        }
+
+        // Configuration de l'adresse du serveur
+        memset(&serv_addr, 0, sizeof(serv_addr));
+        serv_addr.sin_family = AF_INET;
+        serv_addr.sin_addr.s_addr = INADDR_ANY;
+        serv_addr.sin_port = htons(PORT);
+
+        // Bind
+        if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+        {
+            perror("bind");
+            close(sockfd);
+            exit(EXIT_FAILURE);
+        }
+
+        // Listen
+        if (listen(sockfd, 5) < 0)
+        {
+            perror("listen");
+            close(sockfd);
+            exit(EXIT_FAILURE);
+        }
+
+        printf("Serveur en attente de connexions...\n");
+
+        while (1)
+        {
+            client_sock = accept(sockfd, (struct sockaddr *)&cli_addr, &cli_len);
+            if (client_sock < 0)
+            {
+                perror("accept");
+                continue;
+            }
+
+            printf("Connexion acceptée depuis %s:%d\n",
+                    inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
+
+            char local_ip[INET_ADDRSTRLEN];
+            char peer_ip[INET_ADDRSTRLEN];
+
+            if (send_json(client_sock, JSON_FILE_NAME, local_ip, sizeof(local_ip), peer_ip, sizeof(peer_ip)) == 0)
+            {
+                printf("Transmission réussie : %s -> %s\n", local_ip, peer_ip);
+            }
+
+            char *buffer = receive_json(client_sock, local_ip, sizeof(local_ip), peer_ip, sizeof(peer_ip));
+
+            // Ouverture du JSON local
+            json_error_t error;
+
+            // Charger le JSON depuis le fichier
+            json_t *root = json_load_file(JSON_FILE_NAME, 0, &error);
+            if (!root)
+            {
+                fprintf(stderr, "Erreur chargement JSON depuis '%s' : %s\n", JSON_FILE_NAME, error.text);
+                return -1;
+            }
+            print_json_neighbors(JSON_FILE_NAME, peer_ip, buffer);
+            free(buffer);
+            close(client_sock);
+        }
+        close(sockfd);
+
+    } else if (strcmp(command, "delete") == 0) {
+        //printf("Deleting interface: %s\n", ifa->ifa_name);
+
+        //TODO: Ajouter la logique réelle pour supprimer l'interface
+
+        //freeifaddrs(ifap);
+        return INTERFACE_DELETED;
+    } else {
+        fprintf(stderr, "Invalid command. Use 'add' or 'delete'.\n");
+        //freeifaddrs(ifap);
+        return ERROR_INVALID_COMMAND;
     }
 
     return RETURN_SUCCESS;
