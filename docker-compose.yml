@@ -8,6 +8,8 @@ services:
     networks:
       N_C1:
         ipv4_address: 10.1.0.1
+      N_A1:
+        ipv4_address: 192.168.1.1
     cap_add:
     - NET_ADMIN
 
@@ -20,6 +22,8 @@ services:
         ipv4_address: 10.1.0.2
       N_C2:
         ipv4_address: 10.2.0.2
+      N_A2:
+        ipv4_address: 192.168.2.1
     cap_add:
     - NET_ADMIN
 
@@ -30,6 +34,8 @@ services:
     networks:
       N_C3:
         ipv4_address: 10.3.0.3
+      N_A3:
+        ipv4_address: 192.168.3.1
     cap_add:
     - NET_ADMIN
   
@@ -78,3 +84,24 @@ networks:
       config:
         - subnet: 10.3.0.0/24
           gateway: 10.3.0.254
+  
+  N_A1:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+          gateway: 192.168.1.254
+
+  N_A2:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.2.0/24
+          gateway: 192.168.2.254
+
+  N_A3:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.3.0/24
+          gateway: 192.168.3.254

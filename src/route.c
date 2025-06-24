@@ -1,7 +1,3 @@
-#include "route.h"
-#include "lsdb.h"
-#include "return.h"
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -9,8 +5,12 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
-#include <linux/route.h>
 #include <arpa/inet.h>
+#include <net/route.h>
+
+#include "route.h"
+#include "lsdb.h"
+#include "return.h"
 
 ReturnCode add_route(char network[16], char mask[16], char gateway[16], char interface[IFNAMSIZ]) {
     int sockfd;

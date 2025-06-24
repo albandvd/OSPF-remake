@@ -1,7 +1,8 @@
 FROM alpine:3.14
 
 RUN apk update && \
-    apk add gcc make build-base
+    apk add gcc make build-base && \
+    apk add jansson-dev 
 
 COPY entrypoint.sh /opt
 COPY src /opt/ospf
