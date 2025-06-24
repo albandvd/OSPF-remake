@@ -38,7 +38,13 @@ typedef enum {
     FILE_READ_ERROR,
     FILE_CLOSE_ERROR,
 
-    // ---- Autres modules... ajouter ici ----
+    // ---- Routes ----
+    ROUTE_ADDED_SUCCESSFULLY,
+    ROUTE_DELETED_SUCCESSFULLY,
+    ROUTE_ADD_ERROR,
+    ROUTE_DELETE_ERROR,
+    ROUTE_IOCTL_ERROR,
+    ROUTE_SOCKET_ERROR,
 
 } ReturnCode;
 

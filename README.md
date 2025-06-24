@@ -22,7 +22,7 @@ Pour lancer un contnaire Alpine pour pouvoir réaliser des test de dev lancer la
 
 ``` sh
 cd dev
-docker build -t dev-ospf ./; docker run --name dev --rm -it dev-ospf
+docker build -t dev-ospf ./; docker run --name dev --rm -it --cap-add=NET_ADMIN dev-ospf
 ```
 
 Assurez vous d'avoir mis à jour le Makefile pour que les modifications soient bien prise en compte 

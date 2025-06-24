@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g
-OBJ = check-service.o lsdb.o return.o
+OBJ = check-service.o lsdb.o return.o route.o
 
 all: main interface
 
@@ -19,10 +19,13 @@ lsdb.o: lsdb.c lsdb.h return.h
 return.o: return.c return.h
 	$(CC) $(CFLAGS) -c return.c
 
-main.o: main.c check-service.h lsdb.h return.h
+route.o: route.c route.h
+	$(CC) $(CFLAGS) -c route.c
+
+main.o: main.c check-service.h lsdb.h return.h route.h
 	$(CC) $(CFLAGS) -c main.c
 
-interface.o: interface.c check-service.h lsdb.h return.h
+interface.o: interface.c check-service.h lsdb.h return.h route.h
 	$(CC) $(CFLAGS) -c interface.c
 
 clean:
