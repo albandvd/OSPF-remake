@@ -216,6 +216,107 @@ int connect_with_timeout(int sockfd, struct sockaddr_in *serv_addr, int timeout_
     return 0; // Succès
 }
 
+// Utilitaire : vérifie si un réseau existe déjà dans une liste json
+int route_exists(json_t *array, const char *network, const char *mask)
+{
+    size_t i;
+    json_t *elem;
+    json_array_foreach(array, i, elem)
+    {
+        const char *net = json_string_value(json_object_get(elem, "network"));
+        const char *msk = json_string_value(json_object_get(elem, "mask"));
+        if (net && msk && strcmp(net, network) == 0 && strcmp(msk, mask) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+// Trouve l'interface de R1 (gateway) utilisée pour atteindre une IP (next_hop)
+const char *find_gateway_interface(json_t *connected, const char *ip)
+{
+    size_t i;
+    json_t *entry;
+    struct in_addr addr_ip, addr_net, addr_mask, addr_calc;
+
+    if (!inet_aton(ip, &addr_ip))
+        return NULL;
+
+    json_array_foreach(connected, i, entry)
+    {
+        const char *network = json_string_value(json_object_get(entry, "network"));
+        const char *mask = json_string_value(json_object_get(entry, "mask"));
+        const char *gateway = json_string_value(json_object_get(entry, "gateway"));
+        if (!network || !mask || !gateway)
+            continue;
+
+        inet_aton(network, &addr_net);
+        inet_aton(mask, &addr_mask);
+
+        addr_calc.s_addr = addr_ip.s_addr & addr_mask.s_addr;
+        if (addr_calc.s_addr == addr_net.s_addr)
+            return gateway;
+    }
+
+    return NULL;
+}
+
+void update_neighbors(const char *my_json_file, const char *peer_ip, const char *peer_json_text)
+{
+    json_error_t error;
+    json_t *my_root = json_load_file(my_json_file, 0, &error);
+    json_t *peer_root = json_loads(peer_json_text, 0, &error);
+
+    if (!my_root || !peer_root)
+    {
+        fprintf(stderr, "Erreur lors du chargement JSON : %s\n", error.text);
+        return;
+    }
+
+    json_t *my_connected = json_object_get(my_root, "connected");
+    json_t *my_neighbors = json_object_get(my_root, "neighbors");
+    if (!json_is_array(my_connected) || !json_is_array(my_neighbors))
+    {
+        fprintf(stderr, "Champs 'connected' ou 'neighbors' manquants ou invalides.\n");
+        return;
+    }
+
+    json_t *peer_connected = json_object_get(peer_root, "connected");
+    if (!json_is_array(peer_connected))
+        return;
+
+    size_t i;
+    json_t *peer_route;
+    json_array_foreach(peer_connected, i, peer_route)
+    {
+        const char *network = json_string_value(json_object_get(peer_route, "network"));
+        const char *mask = json_string_value(json_object_get(peer_route, "mask"));
+        if (!network || !mask)
+            continue;
+
+        if (route_exists(my_connected, network, mask))
+            continue;
+        if (route_exists(my_neighbors, network, mask))
+            continue;
+
+        // Ajouter aux neighbors
+        const char *gateway = find_gateway_interface(my_connected, peer_ip);
+        if (!gateway)
+            continue;
+
+        json_t *neighbor = json_object();
+        json_object_set_new(neighbor, "network", json_string(network));
+        json_object_set_new(neighbor, "mask", json_string(mask));
+        json_object_set_new(neighbor, "gateway", json_string(gateway));
+        json_object_set_new(neighbor, "hop", json_integer(2));
+        json_object_set_new(neighbor, "next_hop", json_string(peer_ip));
+        json_array_append_new(my_neighbors, neighbor);
+    }
+
+    json_dump_file(my_root, my_json_file, JSON_INDENT(4));
+    json_decref(my_root);
+    json_decref(peer_root);
+}
+
 void envoyer_hello(const char *ip_str)
 {
     int sockfd;
@@ -247,91 +348,82 @@ void envoyer_hello(const char *ip_str)
     timeout.tv_usec = 100000;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
-    // Envoi du HELLO
-    HelloMessage hello;
-    hello.type = htonl(MSG_TYPE_HELLO);
-    hello.router_id = htonl(42);
-    char hostname[HOST_NAME_MAX + 1];
-    gethostname(hostname, sizeof(hostname));
-    strncpy(hello.router_name, hostname, MAX_NAME_LEN);
-    send(sockfd, &hello, sizeof(hello), 0);
-    printf("HELLO envoyé à %s\n", ip_str);
+    // * Envoi du HELLO
+    // HelloMessage hello;
+    // hello.type = htonl(MSG_TYPE_HELLO);
+    // hello.router_id = htonl(42);
+    // char hostname[HOST_NAME_MAX + 1];
+    // gethostname(hostname, sizeof(hostname));
+    // strncpy(hello.router_name, hostname, MAX_NAME_LEN);
+    // send(sockfd, &hello, sizeof(hello), 0);
+    // printf("HELLO envoyé à %s\n", ip_str);
 
-    // Réception ACK
-    HelloAckMessage ack;
-    ssize_t r = recv(sockfd, &ack, sizeof(ack), 0);
+    // * Réception ACK
+    // HelloAckMessage ack;
+    // ssize_t r = recv(sockfd, &ack, sizeof(ack), 0);
 
-    //! ---Temporaire---
+    // if (r > 0)
+    // {
+    //     ack.type = ntohl(ack.type);
+    //     ack.router_id = ntohl(ack.router_id);
+    //     ack.status = ntohl(ack.status);
+    //     printf("ACK reçu de %s: router_id = %d, status = %d\n", ip_str, ack.router_id, ack.status);
 
-    // Initialisation des voisins directs du routeur (init_ospf)
+    //     // IP locale (interface utilisée)
+    //     getsockname(sockfd, (struct sockaddr *)&local_addr, &addr_len);
+    //     char local_ip[INET_ADDRSTRLEN];
+    //     int hop = 1;
+    //     inet_ntop(AF_INET, &local_addr.sin_addr, local_ip, sizeof(local_ip));
 
-    Route new_route1;
-    strncpy(new_route1.network, "172.17.0.0", sizeof(new_route1.network));
-    strncpy(new_route1.mask, "255.255.0.0", sizeof(new_route1.mask));
-    strncpy(new_route1.gateway, "eth0", sizeof(new_route1.gateway));
-    new_route1.hop = 1;
-    init_json("router_info.json", &new_route1);
+    //     // Destination réseau = IP cible & masque /24
+    //     struct in_addr addr;
+    //     inet_pton(AF_INET, ip_str, &addr);
+    //     uint32_t ip_net = ntohl(addr.s_addr);
+    //     ip_net &= 0xFFFFFF00; // /24
+    //     addr.s_addr = htonl(ip_net);
 
-    Route new_route2;
-    strncpy(new_route2.network, "172.17.1.0", sizeof(new_route2.network));
-    strncpy(new_route2.mask, "255.255.0.0", sizeof(new_route2.mask));
-    strncpy(new_route2.gateway, "eth1", sizeof(new_route2.gateway));
-    new_route2.hop = 1;
-    init_json("router_info.json", &new_route2);
+    //     char network[INET_ADDRSTRLEN];
+    //     inet_ntop(AF_INET, &addr, network, sizeof(network));
 
-    strncpy(new_route1.network, "172.17.0.0", sizeof(new_route1.network));
-    strncpy(new_route1.mask, "255.255.0.0", sizeof(new_route1.mask));
-    strncpy(new_route1.gateway, "eth21", sizeof(new_route1.gateway));
-    new_route1.hop = 1;
-    init_json("router_info.json", &new_route1);
+    //     Route route;
+    //     strncpy(route.network, network, sizeof(route.network));
+    //     strncpy(route.mask, "255.255.255.0", sizeof(route.mask));
+    //     strncpy(route.gateway, ip_str, sizeof(route.gateway));
+    //     route.hop = hop;
+    // }
+    // else
+    // {
+    //     perror("Réception ACK échouée");
+    // }
 
-    //! ---Fin temporaire---
-    if (r > 0)
+    // * Reception JSON
+
+    char buffer[8192];
+    int received = recv(sockfd, buffer, 8192 - 1, 0);
+    if (received < 0)
     {
-        ack.type = ntohl(ack.type);
-        ack.router_id = ntohl(ack.router_id);
-        ack.status = ntohl(ack.status);
-        printf("ACK reçu de %s: router_id = %d, status = %d\n", ip_str, ack.router_id, ack.status);
-
-        // IP locale (interface utilisée)
-        getsockname(sockfd, (struct sockaddr *)&local_addr, &addr_len);
-        char local_ip[INET_ADDRSTRLEN];
-        int hop = 1;
-        inet_ntop(AF_INET, &local_addr.sin_addr, local_ip, sizeof(local_ip));
-
-        // Destination réseau = IP cible & masque /24
-        struct in_addr addr;
-        inet_pton(AF_INET, ip_str, &addr);
-        uint32_t ip_net = ntohl(addr.s_addr);
-        ip_net &= 0xFFFFFF00; // /24
-        addr.s_addr = htonl(ip_net);
-
-        char network[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &addr, network, sizeof(network));
-
-        Route route;
-        strncpy(route.network, network, sizeof(route.network));
-        strncpy(route.mask, "255.255.255.0", sizeof(route.mask));
-        strncpy(route.gateway, ip_str, sizeof(route.gateway));
-        route.hop = hop;
-
-        // print_json_append("router_info.json", &route);
+        perror("recv");
+        close(sockfd);
+        exit(EXIT_FAILURE);
     }
-    else
-    {
-        perror("Réception ACK échouée");
-    }
+    buffer[received] = '\0';
+
+    // Mise à jour du JSON local
+    update_neighbors("router_info.json", "10.0.12.2", buffer);
 
     close(sockfd);
 }
 
 int main(int argc, char *argv[])
 {
+    // Regarde si un argument est passé
     if (argc != 2)
     {
         fprintf(stderr, "Usage: %s <interface>\n", argv[0]);
         return EXIT_FAILURE;
     }
+
+    // Recherche de l'interface en paramètre
 
     const char *interface = argv[1];
     struct ifaddrs *ifaddr, *ifa;
@@ -355,6 +447,7 @@ int main(int argc, char *argv[])
             struct sockaddr_in *mask = (struct sockaddr_in *)ifa->ifa_netmask;
 
             my_ip = ntohl(addr->sin_addr.s_addr);
+            // Changer par netmask = ntohl(mask->sin_addr.s_addr); pour du dynamique
             netmask = 0xFFFFFF00;
 
             inet_ntop(AF_INET, &addr->sin_addr, ip_str, INET_ADDRSTRLEN);
@@ -369,6 +462,7 @@ int main(int argc, char *argv[])
 
     freeifaddrs(ifaddr);
 
+    // Erreur si aucune interface n'a été trouvée.
     if (my_ip == 0 || netmask == 0)
     {
         fprintf(stderr, "Erreur : interface %s non trouvée ou sans IPv4\n", interface);

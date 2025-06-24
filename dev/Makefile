@@ -1,19 +1,21 @@
 # Variables
 CC = gcc
-CFLAGS = -Wall -Wextra -I.  # -I. pour inclure le dossier courant (où se trouve hello.h)
+CFLAGS = -Wall -Wextra -I.
 BUILD_DIR = build
 LDFLAGS = -ljansson
 
 CLIENT_SRC = Client/client.c
 SERVER_SRC = Server/server.c
+SERVER_R1_SRC = Server/server_r1.c
 MAIN_SRC = main.c
 
 CLIENT_BIN = $(BUILD_DIR)/client
 SERVER_BIN = $(BUILD_DIR)/server
+SERVER_R1_BIN = $(BUILD_DIR)/server_r1
 MAIN_BIN = $(BUILD_DIR)/main
 
 # Cibles par défaut
-all: $(CLIENT_BIN) $(SERVER_BIN)
+all: $(CLIENT_BIN) $(SERVER_BIN) $(SERVER_R1_BIN)
 
 # Création du dossier de build s'il n'existe pas
 $(BUILD_DIR):
@@ -25,7 +27,11 @@ $(CLIENT_BIN): $(CLIENT_SRC) hello.h | $(BUILD_DIR)
 
 # Compilation du serveur
 $(SERVER_BIN): $(SERVER_SRC) hello.h | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $@ $(SERVER_SRC)
+	$(CC) $(CFLAGS) -o $@ $(SERVER_SRC) $(LDFLAGS)
+
+# Compilation du serveur_r1 (CORRIGÉ)
+$(SERVER_R1_BIN): $(SERVER_R1_SRC) hello.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $@ $(SERVER_R1_SRC) $(LDFLAGS)
 
 # Nettoyage
 clean:

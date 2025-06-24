@@ -138,51 +138,6 @@ save_and_exit:
     json_decref(root);
 }
 
-int send_json(int sockfd, const char *filename)
-{
-    json_error_t error;
-
-    // Charger le JSON depuis le fichier
-    json_t *root = json_load_file(filename, 0, &error);
-    if (!root)
-    {
-        fprintf(stderr, "Erreur chargement JSON depuis '%s' : %s\n", filename, error.text);
-        return -1;
-    }
-
-    // Convertir en chaîne JSON compacte
-    char *json_str = json_dumps(root, JSON_COMPACT);
-    if (!json_str)
-    {
-        fprintf(stderr, "Erreur de conversion JSON en chaîne\n");
-        json_decref(root);
-        return -1;
-    }
-
-    // Envoyer la chaîne JSON
-    ssize_t total_sent = 0;
-    ssize_t length = strlen(json_str);
-    while (total_sent < length)
-    {
-        ssize_t sent = send(sockfd, json_str + total_sent, length - total_sent, 0);
-        if (sent <= 0)
-        {
-            perror("send");
-            free(json_str);
-            json_decref(root);
-            return -1;
-        }
-        total_sent += sent;
-    }
-
-    printf("JSON envoyé (%ld octets).\n", total_sent);
-
-    // Nettoyage
-    free(json_str);
-    json_decref(root);
-    return 0;
-}
-
 void handle_client(int client_sock)
 {
     HelloMessage hello;
@@ -209,6 +164,7 @@ void handle_client(int client_sock)
 
 int main()
 {
+
     // Initialisation du json
     Route route;
     strncpy(route.network, "10.0.12.0", sizeof(route.network));
@@ -216,11 +172,12 @@ int main()
     strncpy(route.gateway, "eth0", sizeof(route.gateway));
     route.hop = 1;
     init_json("router_info.json", &route);
-    strncpy(route.network, "10.0.2.0", sizeof(route.network));
+    strncpy(route.network, "10.0.1.0", sizeof(route.network));
     strncpy(route.mask, "255.255.255.0", sizeof(route.mask));
     strncpy(route.gateway, "eth1", sizeof(route.gateway));
     route.hop = 1;
     init_json("router_info.json", &route);
+
     int sockfd, client_sock;
     struct sockaddr_in serv_addr, cli_addr;
     socklen_t cli_len = sizeof(cli_addr);
@@ -257,21 +214,24 @@ int main()
 
     printf("Serveur en attente de connexions...\n");
 
+    // Boucle infinie pour accepter et traiter chaque client
     while (1)
     {
         client_sock = accept(sockfd, (struct sockaddr *)&cli_addr, &cli_len);
         if (client_sock < 0)
         {
             perror("accept");
-            continue;
+            continue; // continue au lieu de stop
         }
 
         printf("Connexion acceptée depuis %s:%d\n",
                inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
 
-        send_json(client_sock, "router_info.json");
+        handle_client(client_sock);
+        close(client_sock); // Fermer la connexion avec ce client
     }
 
+    // (jamais atteint ici, mais bon à avoir)
     close(sockfd);
     return 0;
 }
