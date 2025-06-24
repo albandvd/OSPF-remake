@@ -1,14 +1,15 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g
+LDFLAGS = -ljansson
 OBJ = check-service.o lsdb.o return.o route.o
 
 all: main interface
 
 main: main.o $(OBJ)
-	$(CC) $(CFLAGS) -o main main.o $(OBJ)
+	$(CC) $(CFLAGS) -o main main.o $(OBJ) $(LDFLAGS)
 
 interface: interface.o $(OBJ)
-	$(CC) $(CFLAGS) -o interface interface.o $(OBJ)
+	$(CC) $(CFLAGS) -o interface interface.o $(OBJ) $(LDFLAGS)
 
 check-service.o: check-service.c check-service.h return.h
 	$(CC) $(CFLAGS) -c check-service.c

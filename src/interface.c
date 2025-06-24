@@ -10,6 +10,8 @@
 #include <net/if.h>
 #include <unistd.h>
 #include <ifaddrs.h>
+#include <net/if.h>
+
 // Usage : ./prog [add|delete] <interface_name>
 int main(int argc, char* argv[]) {
     if (argc >= 2 && strcmp(argv[1], "show") == 0) {
