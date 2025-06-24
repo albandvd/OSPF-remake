@@ -16,8 +16,10 @@
 
 #define MAX_ROUTES 10
 
-int main(int argc, char *argv[]) {
-    if (argc < 2) {
+int main(int argc, char *argv[])
+{
+    if (argc < 2)
+    {
         fprintf(stderr, "Usage: %s <param_int>\n", argv[0]);
         return 1;
     }
@@ -25,7 +27,8 @@ int main(int argc, char *argv[]) {
     printf("Router ID: %d\n", routerID);
 
     FILE *routerID_file = fopen("routerID.txt", "w");
-    if (!routerID_file) {
+    if (!routerID_file)
+    {
         ReturnCode code = FILE_OPEN_ERROR;
         fprintf(stderr, "[main] %s\n", return_code_to_string(code));
         return code;
@@ -49,14 +52,18 @@ int main(int argc, char *argv[]) {
 
     printf("\n===== Interfaces réseaux détectées =====\n");
     struct ifaddrs *ifap = NULL, *ifa = NULL;
-    if (getifaddrs(&ifap) != 0) {
+    if (getifaddrs(&ifap) != 0)
+    {
         perror("getifaddrs failed");
         return 1;
     }
 
-    for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
-        if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
-        if (strcmp(ifa->ifa_name, "lo") == 0) continue;
+    for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next)
+    {
+        if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET)
+            continue;
+        if (strcmp(ifa->ifa_name, "lo") == 0)
+            continue;
 
         struct sockaddr_in *sa = (struct sockaddr_in *)ifa->ifa_addr;
         struct sockaddr_in *nm = (struct sockaddr_in *)ifa->ifa_netmask;
@@ -65,7 +72,8 @@ int main(int argc, char *argv[]) {
         char network[INET_ADDRSTRLEN] = "N/A";
 
         strncpy(ip, inet_ntoa(sa->sin_addr), INET_ADDRSTRLEN - 1);
-        if (ifa->ifa_netmask) {
+        if (ifa->ifa_netmask)
+        {
             strncpy(netmask, inet_ntoa(nm->sin_addr), INET_ADDRSTRLEN - 1);
             struct in_addr net_addr;
             net_addr.s_addr = sa->sin_addr.s_addr & nm->sin_addr.s_addr;
@@ -73,16 +81,16 @@ int main(int argc, char *argv[]) {
         }
 
         // >>> Crée un objet distinct pour chaque interface
-        json_t *connected_obj = json_object();  
+        json_t *connected_obj = json_object();
         json_object_set_new(connected_obj, "network", json_string(network));
         json_object_set_new(connected_obj, "mask", json_string(netmask));
-        json_object_set_new(connected_obj, "gateway", json_string(ip));
+        json_object_set_new(connected_obj, "gateway", json_string(ifa->ifa_name));
         json_object_set_new(connected_obj, "hop", json_integer(1));
         json_array_append_new(connected, connected_obj);
 
         printf("Interface: %s\tIP: %s\tNetmask: %s\tNetwork: %s\n", ifa->ifa_name, ip, netmask, network);
     }
-    
+
     freeifaddrs(ifap);
     json_object_set(root, "connected", connected);
     if (json_dump_file(root, "lsdb.json", JSON_INDENT(4)) != 0)
