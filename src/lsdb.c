@@ -166,14 +166,14 @@ int neighbor_entry_exists(json_t *array, const char *network, const char *mask, 
 }
 
 // Trouve l'interface de R1 (gateway) utilisée pour atteindre une IP (next_hop)
-const ReturnCode *find_gateway_interface(json_t *connected, const char *ip)
+const char *find_gateway_interface(json_t *connected, const char *ip)
 {
     size_t i;
     json_t *entry;
     struct in_addr addr_ip, addr_net, addr_mask, addr_calc;
 
     if (!inet_aton(ip, &addr_ip))
-        return INTERFACE_NOT_FOUND;
+        return NULL;
 
     json_array_foreach(connected, i, entry)
     {
@@ -191,7 +191,7 @@ const ReturnCode *find_gateway_interface(json_t *connected, const char *ip)
             return gateway;
     }
 
-    return RETURN_SUCCESS;
+    return NULL;
 }
 
 ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip, const char *peer_json_text)

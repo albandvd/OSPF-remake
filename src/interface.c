@@ -136,7 +136,7 @@ void run_server()
         if (route_count < 0)
         {
             fprintf(stderr, "Échec de la génération de la table de routage.\n");
-            return 1;
+            return;
         }
 
         for (int i = 0; i < route_count; ++i)
