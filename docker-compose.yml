@@ -6,10 +6,10 @@ services:
     container_name: r1
     hostname: r1
     networks:
-      N_C1:
-        ipv4_address: 10.1.0.1
       N_A1:
         ipv4_address: 192.168.1.1
+      N_C1:
+        ipv4_address: 10.1.0.1
     cap_add:
     - NET_ADMIN
 
@@ -62,6 +62,39 @@ services:
         ipv4_address: 10.3.0.5
     cap_add:
     - NET_ADMIN
+
+  ta1:
+    build:
+      context: ./
+      dockerfile: Dockerfile.terminal
+    container_name: t1
+    hostname: t1
+    command: tail -f /dev/null
+    networks:
+      N_A1:
+        ipv4_address: 192.168.1.10
+
+  ta2:
+    build:
+      context: ./
+      dockerfile: Dockerfile.terminal
+    container_name: t2
+    hostname: t2
+    command: tail -f /dev/null
+    networks:
+      N_A2:
+        ipv4_address: 192.168.2.10
+
+  ta3:
+    build:
+      context: ./
+      dockerfile: Dockerfile.terminal
+    container_name: t3
+    hostname: t3
+    command: tail -f /dev/null
+    networks:
+      N_A3:
+        ipv4_address: 192.168.3.10
 
 networks:
   N_C1:
