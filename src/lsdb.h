@@ -8,7 +8,8 @@
 #define PORT 4242
 #define JSON_FILE_NAME "lsdb.json"
 
-struct Route {
+struct Route
+{
     char network[20];
     char mask[20];
     char gateway[20];
@@ -24,5 +25,7 @@ ReturnCode route_exists(json_t *array, const char *network, const char *mask);
 const ReturnCode *find_gateway_interface(json_t *connected, const char *ip);
 ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip, const char *peer_json_text);
 ReturnCode set_is_ospf(const char *json_file, const char *interface_name);
+ReturnCode send_json_to_ospf_neighbors(const char *json_file);
+int neighbor_entry_exists(json_t *array, const char *network, const char *mask, const char *gateway, const char *next_hop);
 
 #endif
