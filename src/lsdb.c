@@ -439,3 +439,85 @@ ReturnCode send_json_to_ospf_neighbors(const char *json_file)
     printf("JSON envoyé à %d voisin(s) OSPF.\n", sent_count);
     return RETURN_SUCCESS;
 }
+
+int route_exists_and_is_better(Route *routes, int count, Route *new_route)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        if (strcmp(routes[i].network, new_route->network) == 0 &&
+            strcmp(routes[i].mask, new_route->mask) == 0)
+        {
+            // Si on trouve une meilleure route (moins de hops), on remplace
+            if (new_route->hop < routes[i].hop)
+            {
+                routes[i] = *new_route;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int generate_routing_table_from_file(const char *filename, Route *routing_table)
+{
+    json_error_t error;
+    json_t *root = json_load_file(filename, 0, &error);
+    if (!root)
+    {
+        fprintf(stderr, "Erreur de lecture JSON : %s\n", error.text);
+        return -1;
+    }
+
+    int count = 0;
+
+    // 1. Connected routes
+    json_t *connected = json_object_get(root, "connected");
+    if (!json_is_array(connected))
+    {
+        fprintf(stderr, "Erreur : 'connected' n'est pas un tableau JSON.\n");
+        json_decref(root);
+        return -1;
+    }
+
+    size_t i;
+    json_t *entry;
+    json_array_foreach(connected, i, entry)
+    {
+        Route r;
+        snprintf(r.network, sizeof(r.network), "%s", json_string_value(json_object_get(entry, "network")));
+        snprintf(r.mask, sizeof(r.mask), "%s", json_string_value(json_object_get(entry, "mask")));
+        snprintf(r.gateway, sizeof(r.gateway), "%s", json_string_value(json_object_get(entry, "gateway")));
+        r.hop = json_integer_value(json_object_get(entry, "hop"));
+        r.is_connected = 1;
+        strcpy(r.next_hop, "");
+        routing_table[count++] = r;
+    }
+
+    // 2. Neighbors (best only)
+    json_t *neighbors = json_object_get(root, "neighbors");
+    if (!json_is_array(neighbors))
+    {
+        fprintf(stderr, "Erreur : 'neighbors' n'est pas un tableau JSON.\n");
+        json_decref(root);
+        return -1;
+    }
+
+    json_array_foreach(neighbors, i, entry)
+    {
+        Route r;
+        snprintf(r.network, sizeof(r.network), "%s", json_string_value(json_object_get(entry, "network")));
+        snprintf(r.mask, sizeof(r.mask), "%s", json_string_value(json_object_get(entry, "mask")));
+        snprintf(r.gateway, sizeof(r.gateway), "%s", json_string_value(json_object_get(entry, "gateway")));
+        snprintf(r.next_hop, sizeof(r.next_hop), "%s", json_string_value(json_object_get(entry, "next_hop")));
+        r.hop = json_integer_value(json_object_get(entry, "hop"));
+        r.is_connected = 0;
+
+        if (!route_exists_and_is_better(routing_table, count, &r))
+        {
+            routing_table[count++] = r;
+        }
+    }
+
+    json_decref(root);
+    return count;
+}

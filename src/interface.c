@@ -128,6 +128,28 @@ void run_server()
         }
         print_json_neighbors(JSON_FILE_NAME, peer_ip, buffer);
         // send_json_to_ospf_neighbors(JSON_FILE_NAME);
+
+        // Remplissage de la table de routage
+        Route table[MAX_ROUTES];
+        int route_count = generate_routing_table_from_file(JSON_FILE_NAME, table);
+
+        if (route_count < 0)
+        {
+            fprintf(stderr, "Échec de la génération de la table de routage.\n");
+            return 1;
+        }
+
+        for (int i = 0; i < route_count; ++i)
+        {
+            add_route(table[i].network, table[i].mask, table[i].next_hop, table[i].gateway);
+            printf("Route vers %s/%s via %s (%s), hop: %d ajoutée dans la table de routage\n",
+                   table[i].network,
+                   table[i].mask,
+                   table[i].gateway,
+                   table[i].is_connected ? "connected" : table[i].next_hop,
+                   table[i].hop);
+        }
+
         free(buffer);
         close(client_sock);
     }
@@ -175,6 +197,7 @@ int main(int argc, char *argv[])
     else if (strcmp(command, "delete") == 0)
     {
         // TODO: Ajouter la logique réelle pour supprimer l'interface
+
         return INTERFACE_DELETED;
     }
     else
