@@ -6,7 +6,7 @@ RUN apk update && \
 
 COPY entrypoint.sh /opt
 COPY src /opt/ospf
-RUN ls -l /opt/ospf
+RUN dos2unix /opt/entrypoint.sh
 RUN chmod +x /opt/entrypoint.sh
 
 WORKDIR /opt/ospf

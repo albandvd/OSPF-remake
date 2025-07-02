@@ -5,6 +5,7 @@ services:
     build: ./
     container_name: r1
     hostname: r1
+    command: tail -f /dev/null
     networks:
       N_A1:
         ipv4_address: 192.168.1.1
@@ -12,6 +13,7 @@ services:
         ipv4_address: 10.1.0.1
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
 
   r2:
     build: ./
@@ -26,6 +28,7 @@ services:
         ipv4_address: 192.168.2.1
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
 
   r3:
     build: ./
@@ -38,6 +41,7 @@ services:
         ipv4_address: 192.168.3.1
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
 
   r4:
     build: ./
@@ -50,11 +54,13 @@ services:
         ipv4_address: 10.2.0.4
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
 
   r5:
     build: ./
     container_name: r5
     hostname: r5
+    command: tail -f /dev/null
     networks:
       N_C2:
         ipv4_address: 10.2.0.5
@@ -62,6 +68,7 @@ services:
         ipv4_address: 10.3.0.5
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
 
   ta1:
     build:
@@ -69,10 +76,25 @@ services:
       dockerfile: Dockerfile.terminal
     container_name: t1
     hostname: t1
-    command: sh -c "ip route add default via 192.168.1.1; tail -f /dev/null"
+    command: tail -f /dev/null
     networks:
       N_A1:
         ipv4_address: 192.168.1.10
+    cap_add:
+      - NET_ADMIN
+  ta3:
+    build:
+      context: ./
+      dockerfile: Dockerfile.terminal
+    container_name: t3
+    hostname: t3
+    command: tail -f /dev/null
+    networks:
+      N_A3:
+        ipv4_address: 192.168.3.10
+    cap_add:
+      - NET_ADMIN
+
 
   ta2:
     build:
@@ -80,21 +102,13 @@ services:
       dockerfile: Dockerfile.terminal
     container_name: t2
     hostname: t2
-    command: sh -c "ip route add default via 192.168.2.1; tail -f /dev/null"
+    command: sh -c "ip route add default via 192.168.2.1 && tail -f /dev/null"
     networks:
       N_A2:
         ipv4_address: 192.168.2.10
+    cap_add:
+      - NET_ADMIN
 
-  ta3:
-    build:
-      context: ./
-      dockerfile: Dockerfile.terminal
-    container_name: t3
-    hostname: t3
-    command: sh -c "ip route add default via 192.168.3.1; tail -f /dev/null"
-    networks:
-      N_A3:
-        ipv4_address: 192.168.3.10
 
 networks:
   N_C1:
