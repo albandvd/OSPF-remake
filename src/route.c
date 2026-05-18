@@ -2,92 +2,75 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <net/if.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <net/route.h>
+#include <net/if.h>
 
 #include "route.h"
 #include "lsdb.h"
 #include "return.h"
 
-ReturnCode add_route(char network[16], char mask[16], char gateway[16], char interface[IFNAMSIZ]) {
-    int sockfd;
-    struct rtentry route;
-    struct sockaddr_in *addr;
+/* Convert dotted-decimal netmask to CIDR prefix length */
+static int mask_to_prefix(const char *mask)
+{
+    struct in_addr addr;
+    if (!inet_aton(mask, &addr))
+        return -1;
+    uint32_t m = ntohl(addr.s_addr);
+    int bits = 0;
+    while (m & 0x80000000u) { bits++; m <<= 1; }
+    return bits;
+}
 
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
-        ReturnCode code = ROUTE_SOCKET_ERROR;
-        fprintf(stderr, "[route] %s\n", return_code_to_string(code));
-        return code;
-    }
+ReturnCode add_route(char network[16], char mask[16], char gateway[16],
+                     char interface[IFNAMSIZ])
+{
+    int prefix = mask_to_prefix(mask);
+    if (prefix < 0)
+        return ROUTE_ADD_ERROR;
 
-    memset(&route, 0, sizeof(route));
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd),
+             "ip route replace %s/%d via %s dev %s 2>/dev/null",
+             network, prefix, gateway, interface);
 
-    addr = (struct sockaddr_in*)&route.rt_dst;
-    addr->sin_family = AF_INET;
-    inet_pton(AF_INET, network, &addr->sin_addr);
+    if (system(cmd) != 0)
+        return ROUTE_ADD_ERROR;
 
-    addr = (struct sockaddr_in*)&route.rt_genmask;
-    addr->sin_family = AF_INET;
-    inet_pton(AF_INET, mask, &addr->sin_addr);
-
-    addr = (struct sockaddr_in*)&route.rt_gateway;
-    addr->sin_family = AF_INET;
-    inet_pton(AF_INET, gateway, &addr->sin_addr);
-
-    route.rt_flags = RTF_UP | RTF_GATEWAY;
-    route.rt_dev = interface;
-
-    if (ioctl(sockfd, SIOCADDRT, &route) < 0) {
-        close(sockfd);
-        ReturnCode code = ROUTE_IOCTL_ERROR;
-        fprintf(stderr, "[route] %s\n", return_code_to_string(code));
-        return code;
-    }
-
-    close(sockfd);
     return ROUTE_ADDED_SUCCESSFULLY;
 }
 
-ReturnCode delete_route(char network[16], char mask[16], char gateway[16], char interface[IFNAMSIZ]) {
-    int sockfd;
-    struct rtentry route;
-    struct sockaddr_in *addr;
+ReturnCode delete_route(char network[16], char mask[16], char gateway[16],
+                        char interface[IFNAMSIZ])
+{
+    int prefix = mask_to_prefix(mask);
+    if (prefix < 0)
+        return ROUTE_DELETE_ERROR;
 
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
-        ReturnCode code = ROUTE_SOCKET_ERROR;
-        fprintf(stderr, "[route] %s\n", return_code_to_string(code));
-        return code;
-    }
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd),
+             "ip route del %s/%d via %s dev %s 2>/dev/null",
+             network, prefix, gateway, interface);
 
-    memset(&route, 0, sizeof(route));
-
-    addr = (struct sockaddr_in*)&route.rt_dst;
-    addr->sin_family = AF_INET;
-    inet_pton(AF_INET, network, &addr->sin_addr);
-
-    addr = (struct sockaddr_in*)&route.rt_genmask;
-    addr->sin_family = AF_INET;
-    inet_pton(AF_INET, mask, &addr->sin_addr);
-
-    addr = (struct sockaddr_in*)&route.rt_gateway;
-    addr->sin_family = AF_INET;
-    inet_pton(AF_INET, gateway, &addr->sin_addr);
-
-    route.rt_flags = RTF_UP | RTF_GATEWAY;
-    route.rt_dev = interface;
-
-    if (ioctl(sockfd, SIOCDELRT, &route) < 0) {
-        close(sockfd);
-        ReturnCode code = ROUTE_IOCTL_ERROR;
-        fprintf(stderr, "[route] %s\n", return_code_to_string(code));
-        return code;
-    }
-
-    close(sockfd);
+    /* Ignore errors — route may not exist in kernel */
+    system(cmd);
     return ROUTE_DELETED_SUCCESSFULLY;
+}
+
+ReturnCode delete_all_ospf_routes(const char *json_file)
+{
+    Route table[MAX_ROUTES];
+    int count = generate_routing_table_from_file(json_file, table);
+    if (count < 0)
+        return RETURN_SUCCESS;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (table[i].is_connected)
+            continue;
+        if (table[i].next_hop[0] == '\0')
+            continue;
+        delete_route(table[i].network, table[i].mask,
+                     table[i].next_hop, table[i].gateway);
+    }
+    return RETURN_SUCCESS;
 }

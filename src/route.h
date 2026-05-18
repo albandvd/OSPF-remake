@@ -6,5 +6,6 @@
 
 ReturnCode add_route(char network[16], char mask[16], char gateway[16], char interface[IFNAMSIZ]);
 ReturnCode delete_route(char network[16], char mask[16], char gateway[16], char interface[IFNAMSIZ]);
+ReturnCode delete_all_ospf_routes(const char *json_file);
 
 #endif // ROUTE_H

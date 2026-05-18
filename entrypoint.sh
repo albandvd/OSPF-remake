@@ -1,92 +1,56 @@
 #!/bin/sh
 
-echo 1 > /proc/sys/net/ipv4/ip_forward
+# Enable IP forwarding and disable rp_filter (routers need asymmetric forwarding)
+echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
+echo 0 > /proc/sys/net/ipv4/conf/all/rp_filter 2>/dev/null || true
+echo 0 > /proc/sys/net/ipv4/conf/default/rp_filter 2>/dev/null || true
 
 hostname=$(hostname)
 
-wait_for_interface() {
-    iface=$1
-    while [ ! -d "/sys/class/net/$iface" ]; do
-        echo "En attente de l'interface $iface..."
-        sleep 1
-    done
+# Return the interface name whose address matches the given IP prefix
+iface_for_prefix() {
+    prefix=$1
+    ip -o addr show 2>/dev/null \
+        | awk "/inet $prefix/ {print \$2}" \
+        | cut -d'@' -f1 \
+        | head -1
 }
 
-add_route() {
-    destination=$1
-    gateway=$2
-    ip route add "$destination" via "$gateway"
-}
+# Start the OSPF daemon in background and wait for lsdb.json to appear
+/opt/ospf/main &
+sleep 2
 
 case "$hostname" in
   r1)
-    wait_for_interface eth1
-    wait_for_interface eth2
-    /opt/ospf/main
-    /opt/ospf/interface add eth1
-    /opt/ospf/interface add eth2
-
-    add_route 192.168.2.0/24 10.1.0.4     # via r4 (PAS r2)
-    add_route 10.2.0.0/24 10.1.0.4
-    add_route 10.3.0.0/24 10.1.0.4
-    add_route 192.168.3.0/24 10.1.0.4
+    # N_A1 (192.168.1.x) and N_C1 (10.1.x.x)
+    /opt/ospf/interface add "$(iface_for_prefix '10.1.')"
     ;;
 
   r2)
-    wait_for_interface eth1
-    wait_for_interface eth2
-    wait_for_interface eth3
-    /opt/ospf/main
-    /opt/ospf/interface add eth1
-    /opt/ospf/interface add eth2
-    /opt/ospf/interface add eth3
-
-    # Routes classiques, au cas où on le réactive un jour
-    add_route 192.168.1.0/24 10.1.0.1
-    add_route 192.168.3.0/24 10.2.0.5
-    add_route 10.3.0.0/24 10.2.0.5
+    # N_C1 (10.1.x.x), N_C2 (10.2.x.x), N_A2 (192.168.2.x)
+    /opt/ospf/interface add "$(iface_for_prefix '10.1.')"
+    /opt/ospf/interface add "$(iface_for_prefix '10.2.')"
     ;;
 
   r3)
-    wait_for_interface eth1
-    wait_for_interface eth2
-    /opt/ospf/main
-    /opt/ospf/interface add eth1
-    /opt/ospf/interface add eth2
-
-    add_route 192.168.1.0/24 10.3.0.5
-    add_route 192.168.2.0/24 10.3.0.5
-    add_route 10.1.0.0/24 10.3.0.5
-    add_route 10.2.0.0/24 10.3.0.5
+    # N_C3 (10.3.x.x), N_A3 (192.168.3.x)
+    /opt/ospf/interface add "$(iface_for_prefix '10.3.')"
     ;;
 
   r4)
-    wait_for_interface eth0
-    wait_for_interface eth1
-    /opt/ospf/main
-    /opt/ospf/interface add eth0
-    /opt/ospf/interface add eth1
-
-    add_route 192.168.1.0/24 10.1.0.1
-    add_route 192.168.2.0/24 10.2.0.5   # via r5 (PAS r2)
-    add_route 192.168.3.0/24 10.2.0.5
-    add_route 10.3.0.0/24 10.2.0.5
+    # N_C1 (10.1.x.x), N_C2 (10.2.x.x)
+    /opt/ospf/interface add "$(iface_for_prefix '10.1.')"
+    /opt/ospf/interface add "$(iface_for_prefix '10.2.')"
     ;;
 
   r5)
-    wait_for_interface eth0
-    wait_for_interface eth1
-    /opt/ospf/main
-    /opt/ospf/interface add eth0
-    /opt/ospf/interface add eth1
-
-    add_route 192.168.1.0/24 10.2.0.4  # via r4
-    add_route 192.168.2.0/24 10.2.0.4
-    add_route 10.1.0.0/24 10.2.0.4
+    # N_C2 (10.2.x.x), N_C3 (10.3.x.x)
+    /opt/ospf/interface add "$(iface_for_prefix '10.2.')"
+    /opt/ospf/interface add "$(iface_for_prefix '10.3.')"
     ;;
 
   *)
-    echo "Hostname $hostname not recognized" >> /opt/ospf/error.log
+    echo "Hostname '$hostname' non reconnu" >> /opt/ospf/error.log
     ;;
 esac
 
