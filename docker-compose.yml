@@ -1,11 +1,8 @@
-version: "3.8"
-
 services:
   r1:
     build: ./
     container_name: r1
     hostname: r1
-    command: tail -f /dev/null
     networks:
       N_A1:
         ipv4_address: 192.168.1.1
@@ -13,7 +10,6 @@ services:
         ipv4_address: 10.1.0.1
     cap_add:
       - NET_ADMIN
-      - SYS_ADMIN
     sysctls:
       - net.ipv4.conf.all.rp_filter=0
       - net.ipv4.conf.default.rp_filter=0
@@ -32,7 +28,6 @@ services:
         ipv4_address: 192.168.2.1
     cap_add:
       - NET_ADMIN
-      - SYS_ADMIN
     sysctls:
       - net.ipv4.conf.all.rp_filter=0
       - net.ipv4.conf.default.rp_filter=0
@@ -49,7 +44,6 @@ services:
         ipv4_address: 192.168.3.1
     cap_add:
       - NET_ADMIN
-      - SYS_ADMIN
     sysctls:
       - net.ipv4.conf.all.rp_filter=0
       - net.ipv4.conf.default.rp_filter=0
@@ -66,7 +60,6 @@ services:
         ipv4_address: 10.2.0.4
     cap_add:
       - NET_ADMIN
-      - SYS_ADMIN
     sysctls:
       - net.ipv4.conf.all.rp_filter=0
       - net.ipv4.conf.default.rp_filter=0
@@ -76,7 +69,6 @@ services:
     build: ./
     container_name: r5
     hostname: r5
-    command: tail -f /dev/null
     networks:
       N_C2:
         ipv4_address: 10.2.0.5
@@ -84,7 +76,6 @@ services:
         ipv4_address: 10.3.0.5
     cap_add:
       - NET_ADMIN
-      - SYS_ADMIN
     sysctls:
       - net.ipv4.conf.all.rp_filter=0
       - net.ipv4.conf.default.rp_filter=0
@@ -102,6 +93,7 @@ services:
         ipv4_address: 192.168.1.10
     cap_add:
       - NET_ADMIN
+
   ta3:
     build:
       context: ./
@@ -115,7 +107,6 @@ services:
     cap_add:
       - NET_ADMIN
 
-
   ta2:
     build:
       context: ./
@@ -128,7 +119,6 @@ services:
         ipv4_address: 192.168.2.10
     cap_add:
       - NET_ADMIN
-
 
 networks:
   N_C1:
