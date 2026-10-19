@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <time.h>
 #include <net/if.h>
 #include <sys/socket.h>
 
@@ -336,9 +337,11 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
         return RETURN_SUCCESS;
     }
 
-    int modification = 0;
+    int modification = 0; /* a real topology change: bumps "sequence" */
+    int touched = 0;      /* at least one entry's last_seen needs saving */
     int changes = 0;
     int entry_count = 0;
+    json_int_t now = (json_int_t)time(NULL);
 
     /* Add peer's directly connected networks (one hop away) */
     size_t i;
@@ -358,6 +361,8 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
         json_t *existing = find_neighbor_entry(my_neighbors, network, mask, gateway, peer_ip);
         if (existing)
         {
+            json_object_set_new(existing, "last_seen", json_integer(now));
+            touched = 1;
             int cur_hop = (int)json_integer_value(json_object_get(existing, "hop"));
             if (1 < cur_hop)
             {
@@ -369,15 +374,17 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
         }
 
         json_t *nb = json_object();
-        json_object_set_new(nb, "name",     json_string(peer_name));
-        json_object_set_new(nb, "network",  json_string(network));
-        json_object_set_new(nb, "mask",     json_string(mask));
-        json_object_set_new(nb, "gateway",  json_string(gateway));
-        json_object_set_new(nb, "hop",      json_integer(1));
-        json_object_set_new(nb, "next_hop", json_string(peer_ip));
+        json_object_set_new(nb, "name",      json_string(peer_name));
+        json_object_set_new(nb, "network",   json_string(network));
+        json_object_set_new(nb, "mask",      json_string(mask));
+        json_object_set_new(nb, "gateway",   json_string(gateway));
+        json_object_set_new(nb, "hop",       json_integer(1));
+        json_object_set_new(nb, "next_hop",  json_string(peer_ip));
+        json_object_set_new(nb, "last_seen", json_integer(now));
         json_array_append_new(my_neighbors, nb);
         modification = 1;
         changes++;
+        touched = 1;
     }
 
     /* Add peer's known routes (hop = their_hop + 1) */
@@ -413,6 +420,8 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
             json_t *existing = find_neighbor_entry(my_neighbors, network, mask, gateway, peer_ip);
             if (existing)
             {
+                json_object_set_new(existing, "last_seen", json_integer(now));
+                touched = 1;
                 int cur_hop = (int)json_integer_value(json_object_get(existing, "hop"));
                 if (new_hop < cur_hop)
                 {
@@ -424,24 +433,29 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
             }
 
             json_t *nb = json_object();
-            json_object_set_new(nb, "name",     json_string(pn_name));
-            json_object_set_new(nb, "network",  json_string(network));
-            json_object_set_new(nb, "mask",     json_string(mask));
-            json_object_set_new(nb, "gateway",  json_string(gateway));
-            json_object_set_new(nb, "hop",      json_integer(new_hop));
-            json_object_set_new(nb, "next_hop", json_string(peer_ip));
+            json_object_set_new(nb, "name",      json_string(pn_name));
+            json_object_set_new(nb, "network",   json_string(network));
+            json_object_set_new(nb, "mask",      json_string(mask));
+            json_object_set_new(nb, "gateway",   json_string(gateway));
+            json_object_set_new(nb, "hop",       json_integer(new_hop));
+            json_object_set_new(nb, "next_hop",  json_string(peer_ip));
+            json_object_set_new(nb, "last_seen", json_integer(now));
             json_array_append_new(my_neighbors, nb);
             modification = 1;
             changes++;
+            touched = 1;
         }
     }
 
     int rc = RETURN_SUCCESS;
-    if (modification)
+    if (touched)
     {
-        json_t *seq = json_object_get(my_root, "sequence");
-        int sequence = seq ? (int)json_integer_value(seq) : 1;
-        json_object_set(my_root, "sequence", json_integer(sequence + 1));
+        if (modification)
+        {
+            json_t *seq = json_object_get(my_root, "sequence");
+            int sequence = seq ? (int)json_integer_value(seq) : 1;
+            json_object_set(my_root, "sequence", json_integer(sequence + 1));
+        }
         rc = (dump_json_atomic(my_root, my_json_file) == 0) ? RETURN_SUCCESS : JSON_DUMP_ERROR;
     }
 
@@ -563,7 +577,22 @@ ReturnCode unset_is_ospf(const char *json_file, const char *interface_name)
     return rc == 0 ? RETURN_SUCCESS : JSON_DUMP_ERROR;
 }
 
-ReturnCode clear_neighbors(const char *json_file)
+/* Remove neighbor entries that haven't been refreshed in max_age_seconds.
+ *
+ * An earlier version of this cycle wiped the whole neighbors array up
+ * front and rebuilt it from scratch on every discovery cycle. That made a
+ * router briefly report "no neighbors at all" to anyone who queried it
+ * while it was mid-rescan — and since a multi-hop route depends on the
+ * *relaying* router's data, not just the querier's own scan, that gap was
+ * externally visible: reproduced live, a route learned transitively
+ * through another router flickered off for one cycle whenever that
+ * router's own rescan happened to be caught mid-rebuild, which was enough
+ * to drop a ping sent at the wrong moment. Aging entries out individually
+ * by last-seen timestamp instead means a router's advertised neighbor set
+ * is always a complete, valid snapshot — never an artificially emptied
+ * one — at the cost of taking a little longer to purge a route that is
+ * genuinely gone (bounded by max_age_seconds instead of one cycle). */
+ReturnCode prune_stale_neighbors(const char *json_file, int max_age_seconds)
 {
     int lock_fd = lsdb_lock();
 
@@ -575,7 +604,42 @@ ReturnCode clear_neighbors(const char *json_file)
         return JSON_LOAD_ERROR;
     }
 
-    json_object_set_new(root, "neighbors", json_array());
+    json_t *neighbors = json_object_get(root, "neighbors");
+    if (!neighbors || !json_is_array(neighbors))
+    {
+        json_decref(root);
+        lsdb_unlock(lock_fd);
+        return JSON_LOAD_ERROR;
+    }
+
+    time_t now = time(NULL);
+    json_t *kept = json_array();
+    int pruned = 0;
+
+    size_t i;
+    json_t *entry;
+    json_array_foreach(neighbors, i, entry)
+    {
+        json_t *seen = json_object_get(entry, "last_seen");
+        time_t last_seen = seen ? (time_t)json_integer_value(seen) : 0;
+        if (last_seen != 0 && now - last_seen <= max_age_seconds)
+            json_array_append(kept, entry);
+        else
+            pruned++;
+    }
+
+    if (pruned == 0)
+    {
+        json_decref(kept);
+        json_decref(root);
+        lsdb_unlock(lock_fd);
+        return RETURN_SUCCESS;
+    }
+
+    json_object_set_new(root, "neighbors", kept);
+    json_t *seqv = json_object_get(root, "sequence");
+    int sequence = seqv ? (int)json_integer_value(seqv) : 1;
+    json_object_set(root, "sequence", json_integer(sequence + 1));
 
     int rc = dump_json_atomic(root, json_file);
     json_decref(root);

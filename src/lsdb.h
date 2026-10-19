@@ -11,6 +11,7 @@
 #define MAX_ROUTES 100
 #define OSPF_INTERVAL 5  /* seconds between neighbor re-discovery cycles */
 #define MAX_IFACE 16
+#define NEIGHBOR_MAX_AGE_SECONDS (2 * OSPF_INTERVAL) /* see prune_stale_neighbors() */
 
 /* Hop metric convention (kept consistent everywhere — JSON, show, logs):
  *   0 = directly connected network (no router in between)
@@ -51,7 +52,7 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
                                 const char *peer_json_text, MergeStats *stats);
 ReturnCode set_is_ospf(const char *json_file, const char *interface_name);
 ReturnCode unset_is_ospf(const char *json_file, const char *interface_name);
-ReturnCode clear_neighbors(const char *json_file);
+ReturnCode prune_stale_neighbors(const char *json_file, int max_age_seconds);
 int get_ospf_interfaces(const char *json_file, char interfaces[][IFNAMSIZ], int max_count);
 int is_interface_ospf_enabled(const char *json_file, const char *interface_name);
 int neighbor_entry_exists(json_t *array, const char *network, const char *mask, const char *gateway, const char *next_hop);

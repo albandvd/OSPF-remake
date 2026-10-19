@@ -152,11 +152,11 @@ int main(void)
 
         int full_scan = (cycle % FULL_SCAN_EVERY_N_CYCLES == 0);
 
-        clear_neighbors(JSON_FILE_NAME);
         char interfaces[MAX_IFACE][IFNAMSIZ];
         int iface_count = get_ospf_interfaces(JSON_FILE_NAME, interfaces, MAX_IFACE);
         for (int i = 0; i < iface_count; i++)
             scan_subnet_for_ospf(interfaces[i], full_scan);
+        prune_stale_neighbors(JSON_FILE_NAME, NEIGHBOR_MAX_AGE_SECONDS);
 
         Route new_routes[MAX_ROUTES];
         int new_count = generate_routing_table_from_file(JSON_FILE_NAME, new_routes);
