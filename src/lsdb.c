@@ -1,12 +1,15 @@
 #include <unistd.h>
 #include <limits.h>
 #include <sys/types.h>
+#include <sys/file.h>
+#include <fcntl.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <net/if.h>
 #include <sys/socket.h>
 
@@ -14,6 +17,32 @@
 #include "return.h"
 
 #define MAX_HOPS 15   /* routes beyond this hop count are treated as unreachable */
+
+/* Serializes every lsdb.json read-modify-write cycle so that the forked
+ * server process and the main discovery loop never clobber each other's
+ * update (observed in practice: without this lock, a neighbor learned by
+ * one side could vanish because the other side's write was based on a
+ * stale read). */
+static int lsdb_lock(void)
+{
+    int fd = open(LOCK_FILE_NAME, O_CREAT | O_RDWR, 0644);
+    if (fd < 0)
+        return -1;
+    if (flock(fd, LOCK_EX) != 0)
+    {
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+static void lsdb_unlock(int fd)
+{
+    if (fd < 0)
+        return;
+    flock(fd, LOCK_UN);
+    close(fd);
+}
 
 /* Atomic JSON write: write to tmpfile then rename to prevent corruption */
 static int dump_json_atomic(json_t *root, const char *filename)
@@ -23,6 +52,33 @@ static int dump_json_atomic(json_t *root, const char *filename)
     if (json_dump_file(root, tmp, JSON_INDENT(4)) != 0)
         return -1;
     return rename(tmp, filename);
+}
+
+/* Return a safe string for a JSON value: the string itself if it is one,
+ * otherwise `fallback`. Guards every call site that would otherwise pass
+ * json_string_value()'s possible NULL straight into a "%s" format. */
+const char *lsdb_jstr(json_t *value, const char *fallback)
+{
+    if (value && json_is_string(value))
+        return json_string_value(value);
+    return fallback;
+}
+
+static int is_valid_ipv4(const char *s)
+{
+    struct in_addr a;
+    return s && inet_pton(AF_INET, s, &a) == 1;
+}
+
+/* A netmask must be a contiguous run of 1 bits followed by 0 bits */
+static int is_valid_netmask(const char *s)
+{
+    struct in_addr a;
+    if (!s || inet_pton(AF_INET, s, &a) != 1)
+        return 0;
+    uint32_t m = ntohl((uint32_t)a.s_addr);
+    uint32_t inverted = ~m;
+    return (inverted & (inverted + 1)) == 0;
 }
 
 /* Return 1 if ip is one of our own interface addresses (for split-horizon) */
@@ -64,27 +120,28 @@ ReturnCode init_json(const char *output_file)
     json_object_set_new(root, "neighbors", json_array());
     json_object_set_new(root, "sequence", json_integer(1));
 
-    if (dump_json_atomic(root, output_file) != 0)
-    {
-        json_decref(root);
-        return JSON_WRITE_ERROR;
-    }
+    int lock_fd = lsdb_lock();
+    int rc = dump_json_atomic(root, output_file);
+    lsdb_unlock(lock_fd);
 
     json_decref(root);
-    return JSON_WRITE_SUCCESS;
+    return rc == 0 ? JSON_WRITE_SUCCESS : JSON_WRITE_ERROR;
 }
 
 ReturnCode print_json_connected(const char *output_file)
 {
+    int lock_fd = lsdb_lock();
+
     json_error_t error;
     json_t *root = json_load_file(output_file, 0, &error);
     if (!root)
     {
-        fprintf(stderr, "Erreur ouverture JSON '%s': %s\n", output_file, error.text);
+        fprintf(stderr, "Error opening JSON '%s': %s\n", output_file, error.text);
+        lsdb_unlock(lock_fd);
         return JSON_LOAD_ERROR;
     }
 
-    /* Preserve existing is_Ospf flags before rebuilding connected array */
+    /* Preserve existing is_Ospf flags before rebuilding the connected array */
     json_t *old_connected = json_object_get(root, "connected");
     json_t *ospf_flags = json_object();  /* interface_name -> is_Ospf value */
     if (old_connected && json_is_array(old_connected))
@@ -93,7 +150,7 @@ ReturnCode print_json_connected(const char *output_file)
         json_t *oc;
         json_array_foreach(old_connected, k, oc)
         {
-            const char *gw = json_string_value(json_object_get(oc, "gateway"));
+            const char *gw = lsdb_jstr(json_object_get(oc, "gateway"), NULL);
             json_t *flag = json_object_get(oc, "is_Ospf");
             if (gw && flag)
                 json_object_set(ospf_flags, gw, flag);
@@ -108,7 +165,9 @@ ReturnCode print_json_connected(const char *output_file)
     {
         perror("getifaddrs");
         json_decref(ospf_flags);
+        json_decref(connected);
         json_decref(root);
+        lsdb_unlock(lock_fd);
         return INTERFACE_NOT_FOUND;
     }
 
@@ -136,7 +195,7 @@ ReturnCode print_json_connected(const char *output_file)
         json_object_set_new(entry, "network", json_string(network));
         json_object_set_new(entry, "mask", json_string(netmask));
         json_object_set_new(entry, "gateway", json_string(ifa->ifa_name));
-        json_object_set_new(entry, "hop", json_integer(1));
+        json_object_set_new(entry, "hop", json_integer(HOP_CONNECTED));
 
         /* Restore is_Ospf flag if it was set before */
         json_t *prev_flag = json_object_get(ospf_flags, ifa->ifa_name);
@@ -151,14 +210,11 @@ ReturnCode print_json_connected(const char *output_file)
     json_decref(connected);
     json_decref(ospf_flags);
 
-    if (dump_json_atomic(root, output_file) != 0)
-    {
-        json_decref(root);
-        return JSON_DUMP_ERROR;
-    }
-
+    int rc = dump_json_atomic(root, output_file);
     json_decref(root);
-    return JSON_WRITE_SUCCESS;
+    lsdb_unlock(lock_fd);
+
+    return rc == 0 ? JSON_WRITE_SUCCESS : JSON_DUMP_ERROR;
 }
 
 /* Returns 1 if network/mask already in array, 0 otherwise */
@@ -168,8 +224,8 @@ ReturnCode route_exists(json_t *array, const char *network, const char *mask)
     json_t *elem;
     json_array_foreach(array, i, elem)
     {
-        const char *net = json_string_value(json_object_get(elem, "network"));
-        const char *msk = json_string_value(json_object_get(elem, "mask"));
+        const char *net = lsdb_jstr(json_object_get(elem, "network"), NULL);
+        const char *msk = lsdb_jstr(json_object_get(elem, "mask"), NULL);
         if (net && msk && strcmp(net, network) == 0 && strcmp(msk, mask) == 0)
             return INTERFACE_NOT_FOUND;  /* reuse code meaning "already exists" */
     }
@@ -184,10 +240,10 @@ static json_t *find_neighbor_entry(json_t *array, const char *network, const cha
     json_t *elem;
     json_array_foreach(array, i, elem)
     {
-        const char *net = json_string_value(json_object_get(elem, "network"));
-        const char *msk = json_string_value(json_object_get(elem, "mask"));
-        const char *gw  = json_string_value(json_object_get(elem, "gateway"));
-        const char *nh  = json_string_value(json_object_get(elem, "next_hop"));
+        const char *net = lsdb_jstr(json_object_get(elem, "network"), NULL);
+        const char *msk = lsdb_jstr(json_object_get(elem, "mask"), NULL);
+        const char *gw  = lsdb_jstr(json_object_get(elem, "gateway"), NULL);
+        const char *nh  = lsdb_jstr(json_object_get(elem, "next_hop"), NULL);
         if (net && msk && gw && nh &&
             strcmp(net, network) == 0 &&
             strcmp(msk, mask) == 0 &&
@@ -216,9 +272,9 @@ const char *find_gateway_interface(json_t *connected, const char *ip)
 
     json_array_foreach(connected, i, entry)
     {
-        const char *network = json_string_value(json_object_get(entry, "network"));
-        const char *mask    = json_string_value(json_object_get(entry, "mask"));
-        const char *gateway = json_string_value(json_object_get(entry, "gateway"));
+        const char *network = lsdb_jstr(json_object_get(entry, "network"), NULL);
+        const char *mask    = lsdb_jstr(json_object_get(entry, "mask"), NULL);
+        const char *gateway = lsdb_jstr(json_object_get(entry, "gateway"), NULL);
         if (!network || !mask || !gateway)
             continue;
 
@@ -232,10 +288,15 @@ const char *find_gateway_interface(json_t *connected, const char *ip)
 }
 
 ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
-                                const char *peer_json_text)
+                                const char *peer_json_text, MergeStats *stats)
 {
+    if (stats)
+        memset(stats, 0, sizeof(*stats));
+
     if (!peer_json_text)
         return ERROR_INVALID_ARGUMENT;
+
+    int lock_fd = lsdb_lock();
 
     json_error_t error;
     json_t *my_root   = json_load_file(my_json_file, 0, &error);
@@ -243,9 +304,10 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
 
     if (!my_root || !peer_root)
     {
-        fprintf(stderr, "Erreur chargement JSON: %s\n", error.text);
+        fprintf(stderr, "Error loading JSON: %s\n", error.text);
         if (my_root)   json_decref(my_root);
         if (peer_root) json_decref(peer_root);
+        lsdb_unlock(lock_fd);
         return RETURN_UNKNOWN_ERROR;
     }
 
@@ -259,30 +321,34 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
     {
         json_decref(my_root);
         json_decref(peer_root);
+        lsdb_unlock(lock_fd);
         return RETURN_UNKNOWN_ERROR;
     }
 
-    const char *peer_name = json_string_value(json_object_get(peer_root, "name"));
-    if (!peer_name) peer_name = peer_ip;
+    const char *peer_name = lsdb_jstr(json_object_get(peer_root, "name"), peer_ip);
 
     const char *gateway = find_gateway_interface(my_connected, peer_ip);
     if (!gateway)
     {
         json_decref(my_root);
         json_decref(peer_root);
+        lsdb_unlock(lock_fd);
         return RETURN_SUCCESS;
     }
 
     int modification = 0;
+    int changes = 0;
+    int entry_count = 0;
 
-    /* Add peer's directly connected networks (hop = 2) */
+    /* Add peer's directly connected networks (one hop away) */
     size_t i;
     json_t *pr;
     json_array_foreach(peer_connected, i, pr)
     {
-        const char *network = json_string_value(json_object_get(pr, "network"));
-        const char *mask    = json_string_value(json_object_get(pr, "mask"));
-        if (!network || !mask)
+        entry_count++;
+        const char *network = lsdb_jstr(json_object_get(pr, "network"), NULL);
+        const char *mask    = lsdb_jstr(json_object_get(pr, "mask"), NULL);
+        if (!is_valid_ipv4(network) || !is_valid_netmask(mask))
             continue;
 
         /* Skip networks we are already directly connected to */
@@ -293,10 +359,11 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
         if (existing)
         {
             int cur_hop = (int)json_integer_value(json_object_get(existing, "hop"));
-            if (2 < cur_hop)
+            if (1 < cur_hop)
             {
-                json_object_set(existing, "hop", json_integer(2));
+                json_object_set(existing, "hop", json_integer(1));
                 modification = 1;
+                changes++;
             }
             continue;
         }
@@ -306,10 +373,11 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
         json_object_set_new(nb, "network",  json_string(network));
         json_object_set_new(nb, "mask",     json_string(mask));
         json_object_set_new(nb, "gateway",  json_string(gateway));
-        json_object_set_new(nb, "hop",      json_integer(2));
+        json_object_set_new(nb, "hop",      json_integer(1));
         json_object_set_new(nb, "next_hop", json_string(peer_ip));
         json_array_append_new(my_neighbors, nb);
         modification = 1;
+        changes++;
     }
 
     /* Add peer's known routes (hop = their_hop + 1) */
@@ -319,12 +387,14 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
         json_t *pn;
         json_array_foreach(peer_neighbors, j, pn)
         {
-            const char *network      = json_string_value(json_object_get(pn, "network"));
-            const char *mask         = json_string_value(json_object_get(pn, "mask"));
-            const char *pn_name      = json_string_value(json_object_get(pn, "name"));
-            const char *peer_next_hop = json_string_value(json_object_get(pn, "next_hop"));
+            entry_count++;
+            const char *network      = lsdb_jstr(json_object_get(pn, "network"), NULL);
+            const char *mask         = lsdb_jstr(json_object_get(pn, "mask"), NULL);
+            const char *pn_name      = lsdb_jstr(json_object_get(pn, "name"), peer_name);
+            const char *peer_next_hop = lsdb_jstr(json_object_get(pn, "next_hop"), NULL);
             int peer_hop             = (int)json_integer_value(json_object_get(pn, "hop"));
-            if (!network || !mask)
+
+            if (!is_valid_ipv4(network) || !is_valid_netmask(mask))
                 continue;
 
             /* Hop limit: discard routes that are too far */
@@ -348,12 +418,13 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
                 {
                     json_object_set(existing, "hop", json_integer(new_hop));
                     modification = 1;
+                    changes++;
                 }
                 continue;
             }
 
             json_t *nb = json_object();
-            json_object_set_new(nb, "name",     json_string(pn_name ? pn_name : peer_name));
+            json_object_set_new(nb, "name",     json_string(pn_name));
             json_object_set_new(nb, "network",  json_string(network));
             json_object_set_new(nb, "mask",     json_string(mask));
             json_object_set_new(nb, "gateway",  json_string(gateway));
@@ -361,33 +432,50 @@ ReturnCode print_json_neighbors(const char *my_json_file, const char *peer_ip,
             json_object_set_new(nb, "next_hop", json_string(peer_ip));
             json_array_append_new(my_neighbors, nb);
             modification = 1;
+            changes++;
         }
     }
 
+    int rc = RETURN_SUCCESS;
     if (modification)
     {
         json_t *seq = json_object_get(my_root, "sequence");
         int sequence = seq ? (int)json_integer_value(seq) : 1;
         json_object_set(my_root, "sequence", json_integer(sequence + 1));
+        rc = (dump_json_atomic(my_root, my_json_file) == 0) ? RETURN_SUCCESS : JSON_DUMP_ERROR;
     }
 
-    dump_json_atomic(my_root, my_json_file);
+    if (stats)
+    {
+        strncpy(stats->peer_name, peer_name, sizeof(stats->peer_name) - 1);
+        stats->peer_sequence = (int)json_integer_value(json_object_get(peer_root, "sequence"));
+        stats->entry_count = entry_count;
+        stats->changes = changes;
+    }
+
     json_decref(my_root);
     json_decref(peer_root);
-    return RETURN_SUCCESS;
+    lsdb_unlock(lock_fd);
+    return rc;
 }
 
 ReturnCode set_is_ospf(const char *json_file, const char *interface_name)
 {
+    int lock_fd = lsdb_lock();
+
     json_error_t error;
     json_t *root = json_load_file(json_file, 0, &error);
     if (!root)
+    {
+        lsdb_unlock(lock_fd);
         return JSON_LOAD_ERROR;
+    }
 
     json_t *connected = json_object_get(root, "connected");
     if (!connected || !json_is_array(connected))
     {
         json_decref(root);
+        lsdb_unlock(lock_fd);
         return JSON_LOAD_ERROR;
     }
 
@@ -396,7 +484,7 @@ ReturnCode set_is_ospf(const char *json_file, const char *interface_name)
     int found = 0;
     json_array_foreach(connected, i, entry)
     {
-        const char *gateway = json_string_value(json_object_get(entry, "gateway"));
+        const char *gateway = lsdb_jstr(json_object_get(entry, "gateway"), NULL);
         if (gateway && strcmp(gateway, interface_name) == 0)
         {
             json_object_set_new(entry, "is_Ospf", json_integer(1));
@@ -408,6 +496,7 @@ ReturnCode set_is_ospf(const char *json_file, const char *interface_name)
     if (!found)
     {
         json_decref(root);
+        lsdb_unlock(lock_fd);
         return INTERFACE_NOT_FOUND;
     }
 
@@ -415,26 +504,29 @@ ReturnCode set_is_ospf(const char *json_file, const char *interface_name)
     int sequence = seq ? (int)json_integer_value(seq) : 1;
     json_object_set(root, "sequence", json_integer(sequence + 1));
 
-    if (dump_json_atomic(root, json_file) != 0)
-    {
-        json_decref(root);
-        return JSON_DUMP_ERROR;
-    }
+    int rc = dump_json_atomic(root, json_file);
     json_decref(root);
-    return RETURN_SUCCESS;
+    lsdb_unlock(lock_fd);
+    return rc == 0 ? RETURN_SUCCESS : JSON_DUMP_ERROR;
 }
 
 ReturnCode unset_is_ospf(const char *json_file, const char *interface_name)
 {
+    int lock_fd = lsdb_lock();
+
     json_error_t error;
     json_t *root = json_load_file(json_file, 0, &error);
     if (!root)
+    {
+        lsdb_unlock(lock_fd);
         return JSON_LOAD_ERROR;
+    }
 
     json_t *connected = json_object_get(root, "connected");
     if (!connected || !json_is_array(connected))
     {
         json_decref(root);
+        lsdb_unlock(lock_fd);
         return JSON_LOAD_ERROR;
     }
 
@@ -443,7 +535,7 @@ ReturnCode unset_is_ospf(const char *json_file, const char *interface_name)
     int found = 0;
     json_array_foreach(connected, i, entry)
     {
-        const char *gateway = json_string_value(json_object_get(entry, "gateway"));
+        const char *gateway = lsdb_jstr(json_object_get(entry, "gateway"), NULL);
         if (gateway && strcmp(gateway, interface_name) == 0)
         {
             json_object_set_new(entry, "is_Ospf", json_integer(0));
@@ -455,34 +547,40 @@ ReturnCode unset_is_ospf(const char *json_file, const char *interface_name)
     if (!found)
     {
         json_decref(root);
+        lsdb_unlock(lock_fd);
         return INTERFACE_NOT_FOUND;
     }
 
-    if (dump_json_atomic(root, json_file) != 0)
-    {
-        json_decref(root);
-        return JSON_DUMP_ERROR;
-    }
+    /* Same bookkeeping as set_is_ospf(): disabling an interface is also a
+     * topology change and must bump the sequence number. */
+    json_t *seq = json_object_get(root, "sequence");
+    int sequence = seq ? (int)json_integer_value(seq) : 1;
+    json_object_set(root, "sequence", json_integer(sequence + 1));
+
+    int rc = dump_json_atomic(root, json_file);
     json_decref(root);
-    return RETURN_SUCCESS;
+    lsdb_unlock(lock_fd);
+    return rc == 0 ? RETURN_SUCCESS : JSON_DUMP_ERROR;
 }
 
 ReturnCode clear_neighbors(const char *json_file)
 {
+    int lock_fd = lsdb_lock();
+
     json_error_t error;
     json_t *root = json_load_file(json_file, 0, &error);
     if (!root)
+    {
+        lsdb_unlock(lock_fd);
         return JSON_LOAD_ERROR;
+    }
 
     json_object_set_new(root, "neighbors", json_array());
 
-    if (dump_json_atomic(root, json_file) != 0)
-    {
-        json_decref(root);
-        return JSON_DUMP_ERROR;
-    }
+    int rc = dump_json_atomic(root, json_file);
     json_decref(root);
-    return RETURN_SUCCESS;
+    lsdb_unlock(lock_fd);
+    return rc == 0 ? RETURN_SUCCESS : JSON_DUMP_ERROR;
 }
 
 int get_ospf_interfaces(const char *json_file, char interfaces[][IFNAMSIZ], int max_count)
@@ -509,7 +607,7 @@ int get_ospf_interfaces(const char *json_file, char interfaces[][IFNAMSIZ], int 
         json_t *flag = json_object_get(entry, "is_Ospf");
         if (!flag || json_integer_value(flag) == 0)
             continue;
-        const char *gw = json_string_value(json_object_get(entry, "gateway"));
+        const char *gw = lsdb_jstr(json_object_get(entry, "gateway"), NULL);
         if (gw)
         {
             strncpy(interfaces[count], gw, IFNAMSIZ - 1);
@@ -520,6 +618,42 @@ int get_ospf_interfaces(const char *json_file, char interfaces[][IFNAMSIZ], int 
 
     json_decref(root);
     return count;
+}
+
+/* Used by the server to reject exchanges arriving on an interface that was
+ * never (or no longer) enabled for OSPF — required so that `interface
+ * delete` actually stops the protocol on that link (cahier des charges 1.4),
+ * since the listening socket itself is bound to INADDR_ANY. */
+int is_interface_ospf_enabled(const char *json_file, const char *interface_name)
+{
+    if (!interface_name)
+        return 0;
+
+    json_error_t error;
+    json_t *root = json_load_file(json_file, 0, &error);
+    if (!root)
+        return 0;
+
+    json_t *connected = json_object_get(root, "connected");
+    int enabled = 0;
+    if (connected && json_is_array(connected))
+    {
+        size_t i;
+        json_t *entry;
+        json_array_foreach(connected, i, entry)
+        {
+            const char *gw = lsdb_jstr(json_object_get(entry, "gateway"), NULL);
+            if (gw && strcmp(gw, interface_name) == 0)
+            {
+                json_t *flag = json_object_get(entry, "is_Ospf");
+                enabled = flag && json_integer_value(flag) != 0;
+                break;
+            }
+        }
+    }
+
+    json_decref(root);
+    return enabled;
 }
 
 int route_exists_and_is_better(Route *routes, int count, Route *new_route)
@@ -543,7 +677,7 @@ int generate_routing_table_from_file(const char *filename, Route *routing_table)
     json_t *root = json_load_file(filename, 0, &error);
     if (!root)
     {
-        fprintf(stderr, "Erreur lecture JSON: %s\n", error.text);
+        fprintf(stderr, "Error reading JSON: %s\n", error.text);
         return -1;
     }
 
@@ -562,12 +696,9 @@ int generate_routing_table_from_file(const char *filename, Route *routing_table)
     {
         Route r;
         memset(&r, 0, sizeof(r));
-        snprintf(r.network,  sizeof(r.network),  "%s",
-                 json_string_value(json_object_get(entry, "network")));
-        snprintf(r.mask,     sizeof(r.mask),     "%s",
-                 json_string_value(json_object_get(entry, "mask")));
-        snprintf(r.gateway,  sizeof(r.gateway),  "%s",
-                 json_string_value(json_object_get(entry, "gateway")));
+        snprintf(r.network,  sizeof(r.network),  "%s", lsdb_jstr(json_object_get(entry, "network"), ""));
+        snprintf(r.mask,     sizeof(r.mask),     "%s", lsdb_jstr(json_object_get(entry, "mask"), ""));
+        snprintf(r.gateway,  sizeof(r.gateway),  "%s", lsdb_jstr(json_object_get(entry, "gateway"), ""));
         r.hop = (int)json_integer_value(json_object_get(entry, "hop"));
         r.is_connected = 1;
         routing_table[count++] = r;
@@ -582,14 +713,10 @@ int generate_routing_table_from_file(const char *filename, Route *routing_table)
             if (count >= MAX_ROUTES) break;
             Route r;
             memset(&r, 0, sizeof(r));
-            snprintf(r.network,  sizeof(r.network),  "%s",
-                     json_string_value(json_object_get(entry, "network")));
-            snprintf(r.mask,     sizeof(r.mask),     "%s",
-                     json_string_value(json_object_get(entry, "mask")));
-            snprintf(r.gateway,  sizeof(r.gateway),  "%s",
-                     json_string_value(json_object_get(entry, "gateway")));
-            snprintf(r.next_hop, sizeof(r.next_hop), "%s",
-                     json_string_value(json_object_get(entry, "next_hop")));
+            snprintf(r.network,  sizeof(r.network),  "%s", lsdb_jstr(json_object_get(entry, "network"), ""));
+            snprintf(r.mask,     sizeof(r.mask),     "%s", lsdb_jstr(json_object_get(entry, "mask"), ""));
+            snprintf(r.gateway,  sizeof(r.gateway),  "%s", lsdb_jstr(json_object_get(entry, "gateway"), ""));
+            snprintf(r.next_hop, sizeof(r.next_hop), "%s", lsdb_jstr(json_object_get(entry, "next_hop"), ""));
             r.hop = (int)json_integer_value(json_object_get(entry, "hop"));
             r.is_connected = 0;
 
