@@ -1,2 +1,16 @@
+# Editors
 .vscode
-dev/main.c
+.idea
+
+# Build artifacts (src/Makefile)
+src/*.o
+src/main
+src/interface
+src/show
+
+# Runtime state created by the daemon (never ship a stale lsdb.json)
+lsdb.json
+lsdb.lock
+*.tmp*
+
+error.log
