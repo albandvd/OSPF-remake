@@ -120,6 +120,28 @@ services:
     cap_add:
       - NET_ADMIN
 
+  scenario:
+    image: docker:27-cli
+    container_name: scenario
+    entrypoint: ["/bin/sh", "/scenario/run.sh"]
+    profiles: ["demo"]
+    depends_on:
+      - r1
+      - r2
+      - r3
+      - r4
+      - r5
+      - ta1
+      - ta2
+      - ta3
+    volumes:
+      # Lets this container drive the others (docker stop/start/exec) via
+      # the sibling-container pattern. Read-only, and only reasonable
+      # because this is a local demo lab — see README for the caveat
+      # before reusing this pattern anywhere that isn't.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scenario:/scenario:ro
+
 networks:
   N_C1:
     driver: bridge
