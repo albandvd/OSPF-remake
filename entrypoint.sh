@@ -1,13 +1,20 @@
 #!/bin/sh
 
-# Enable IP forwarding and disable rp_filter (routers need asymmetric forwarding)
-echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
-echo 0 > /proc/sys/net/ipv4/conf/all/rp_filter 2>/dev/null || true
-echo 0 > /proc/sys/net/ipv4/conf/default/rp_filter 2>/dev/null || true
-
 hostname=$(hostname)
 
-# Return the interface name whose address matches the given IP prefix
+# Docker Compose already sets ip_forward/rp_filter declaratively via the
+# `sysctls:` block in docker-compose.yml — doing it again here only produced
+# confusing "Read-only file system" errors in some container runtimes
+# without adding anything.
+
+# Docker injects a default route via the bridge gateway (x.x.x.254) on every
+# network. Routers must not keep it: if they did, traffic could silently
+# leave through the bridge instead of taking the path OSPF computed, which
+# would defeat the whole point of the demo. Terminals keep their default
+# route (set explicitly in docker-compose.yml) since they are not routers.
+ip route del default 2>/dev/null || true
+
+# Print the interface name whose address falls in the given /prefix
 iface_for_prefix() {
     prefix=$1
     ip -o addr show 2>/dev/null \
@@ -16,7 +23,8 @@ iface_for_prefix() {
         | head -1
 }
 
-# Start the OSPF daemon in background and wait for lsdb.json to appear
+# Start the OSPF daemon in the background and give it a moment to create
+# lsdb.json before `interface add` tries to read it.
 /opt/ospf/main &
 sleep 2
 
@@ -50,7 +58,7 @@ case "$hostname" in
     ;;
 
   *)
-    echo "Hostname '$hostname' non reconnu" >> /opt/ospf/error.log
+    echo "Unrecognized hostname '$hostname'" >> /opt/ospf/error.log
     ;;
 esac
 
