@@ -18,7 +18,12 @@ CONVERGENCE_TIMEOUT=120
 RESULTS_FILE=/tmp/scenario_results.txt
 : > "$RESULTS_FILE"
 
-RED='\033[31m'; GREEN='\033[32m'; YELLOW='\033[33m'; BLUE='\033[34m'; BOLD='\033[1m'; RESET='\033[0m'
+# Plain shell assignment does not interpret backslash escapes — only
+# printf's own FORMAT argument does — so these are built with printf
+# itself to get real ESC bytes in the variables, not the literal text
+# "\033[31m".
+RED=$(printf '\033[31m'); GREEN=$(printf '\033[32m'); YELLOW=$(printf '\033[33m')
+BLUE=$(printf '\033[34m'); BOLD=$(printf '\033[1m'); RESET=$(printf '\033[0m')
 
 banner() {
     printf '\n%s%s=== %s ===%s\n\n' "$BOLD" "$YELLOW" "$1" "$RESET"
