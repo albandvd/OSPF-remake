@@ -54,7 +54,7 @@ How much of that is actually implemented is in [Requirements coverage](#requirem
 **Prerequisites:** Docker with Compose v2 (`docker compose version`).
 
 ```sh
-git clone <this-repo>
+git clone https://github.com/albandvd/OSPF-remake.git
 cd OSPF-remake
 docker compose up --build
 ```
@@ -437,5 +437,5 @@ OSPF-remake/
 
 ## Authors & license
 
-**Author:** Alban DAVID (alban.david@proton.me), Laurent BOUAlAVONG
+**Author:** Alban DAVID (alban.david@proton.me), Laurent BOUALAVONG (laurent.boualavong@gmail.com)
 **License:** no license file is currently present in this repository.
